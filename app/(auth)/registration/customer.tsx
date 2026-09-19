@@ -8,11 +8,17 @@ import { Feather } from '@expo/vector-icons';
 import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
 import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
 
+// Import auth store
+import { useAuthStore } from '@/stores/authStore';
+
 export default function CustomerRegistration() {
   const [fullName, setFullName] = useState('Chinedu Okafor');
   const [email, setEmail] = useState('chinedu.okafor@outlook.com');
   const [phone, setPhone] = useState('08034567890');
   const [agree, setAgree] = useState(true);
+
+  // Get setUser from auth store
+  const setUser = useAuthStore((state) => state.setUser);
 
   const [fontsLoaded] = useFonts({
     Gabarito_800ExtraBold,
@@ -23,6 +29,19 @@ export default function CustomerRegistration() {
   if (!fontsLoaded) {
     return null;
   }
+
+  const handleContinue = () => {
+    // Set user in auth store (would come from API in real app)
+    setUser({
+      id: `customer-${Date.now()}`,
+      role: 'customer',
+      email: email,
+      name: fullName,
+    });
+
+    // Navigate to OTP verification
+    router.push('/(auth)/otp');
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -41,7 +60,7 @@ export default function CustomerRegistration() {
         </View>
       </View>
 
-      {/* Progress Bar - INCREASED BOTTOM MARGIN */}
+      {/* Progress Bar */}
       <View className="h-1 bg-background-dark mx-6 rounded-full mb-12">
         <View className="h-full bg-primary rounded-full w-1/3" />
       </View>
@@ -132,7 +151,7 @@ export default function CustomerRegistration() {
       <View className="px-6 pb-6 pt-3 bg-white">
         <TouchableOpacity
           className="bg-primary rounded-xl py-4 items-center"
-          onPress={() => router.push('/(auth)/otp')}
+          onPress={handleContinue}
         >
           <Text className="text-white text-body font-gabarito">Continue</Text>
         </TouchableOpacity>

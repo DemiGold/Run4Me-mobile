@@ -3,16 +3,18 @@ import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-
-// Import fonts
 import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
 import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function OTPScreen() {
   const [otp, setOtp] = useState(['4', '8', '2', '7', '', '']);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(3);
 
   const inputRefs = useRef<Array<TextInput | null>>([]);
+
+  // Get user from auth store
+  const user = useAuthStore((state) => state.user);
 
   const [fontsLoaded] = useFonts({
     Gabarito_800ExtraBold,
@@ -40,6 +42,19 @@ export default function OTPScreen() {
     }
   };
 
+  const handleVerify = () => {
+    // In a real app, you'd validate the OTP here
+    // For now, we'll assume it's correct and navigate
+    
+    const userRole = user?.role || 'customer';
+    
+    if (userRole === 'customer') {
+      router.replace('/(customer)');
+    } else {
+      router.replace('/(runner)');
+    }
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-white">
 
@@ -60,7 +75,7 @@ export default function OTPScreen() {
         </Text>
         <Text className="text-body-sm font-figtree text-text-gray leading-5 mb-8">
           We've sent a 6-digit verification code to{' '}
-          <Text className="font-figtree-bold text-text-dark">chinedu.okafor@outlook.com</Text>
+          <Text className="font-figtree-bold text-text-dark">chinedu.okafor@gmail.com</Text>
         </Text>
 
         {/* OTP Input Row */}
@@ -94,10 +109,10 @@ export default function OTPScreen() {
           </Text>
         </View>
 
-        {/* Verify Button */}
+        {/* Verify Button - NOW NAVIGATES TO DASHBOARD */}
         <TouchableOpacity
           className="bg-primary rounded-xl py-4 items-center mb-7"
-          onPress={() => router.push('/(auth)/location-permission')}
+          onPress={handleVerify}
         >
           <Text className="text-white text-body font-gabarito">Verify & Continue</Text>
         </TouchableOpacity>

@@ -8,9 +8,15 @@ import { Feather } from '@expo/vector-icons';
 import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
 import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
 
+// Import auth store
+import { useAuthStore } from '@/stores/authStore';
+
 export default function IdentityVerification() {
   const [nin, setNin] = useState('12345678901');
   const [idType, setIdType] = useState('NIN Slip / Plastic Card');
+
+  // Get setUser from auth store
+  const setUser = useAuthStore((state) => state.setUser);
 
   const [fontsLoaded] = useFonts({
     Gabarito_800ExtraBold,
@@ -21,6 +27,19 @@ export default function IdentityVerification() {
   if (!fontsLoaded) {
     return null;
   }
+
+  const handleContinue = () => {
+    // Set user in auth store (would come from API in real app)
+    setUser({
+      id: `runner-${Date.now()}`,
+      role: 'runner',
+      email: 'tobi.adebayo@gmail.com',
+      name: 'Tobi Adebayo',
+    });
+
+    // Navigate directly to runner dashboard
+    router.replace('/(runner)');
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -116,7 +135,7 @@ export default function IdentityVerification() {
       <View className="px-6 pb-6 pt-3 bg-white">
         <TouchableOpacity
           className="bg-primary rounded-xl py-4 items-center"
-          onPress={() => router.push('/(auth)/otp')}
+          onPress={handleContinue}
         >
           <Text className="text-white text-body font-gabarito">Continue</Text>
         </TouchableOpacity>

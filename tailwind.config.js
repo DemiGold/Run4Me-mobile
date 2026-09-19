@@ -68,8 +68,11 @@ module.exports = {
           muted: slate[100],     // #F1F5F9
         },
         status: {
-          error: red[500],       // #EF4444
-          errorLight: red[50],   // #FEE2E2
+          error: red[500],        // #EF4444
+          errorLight: red[50],    // #FEE2E2
+          success: '#22C55E',
+          successLight: '#DCFCE7', 
+          successDark: '#16A34A',
         },
         // ─── Opacity utilities ───
         'black/25': 'rgba(0,0,0,0.25)',   // #00000040

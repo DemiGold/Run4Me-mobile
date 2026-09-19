@@ -3,9 +3,13 @@ import { View, Text, TouchableOpacity, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
+
 // Import fonts
 import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
 import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+
+// Import auth store
+import { useAuthStore } from '@/stores/authStore';
 
 const mapImage = require('../../assets/Rectangle.png');
 const { width } = Dimensions.get('window');
@@ -17,9 +21,25 @@ export default function LocationPermission() {
     Figtree_700Bold,
   });
 
+  // Get user from auth store
+  const user = useAuthStore((state) => state.user);
+
   if (!fontsLoaded) {
     return null;
   }
+
+  const handleAllowLocation = () => {
+    // In a real app, you'd request location permissions here
+    // For now, we'll navigate based on user role
+    
+    const userRole = user?.role || 'customer';
+    
+    if (userRole === 'customer') {
+      router.replace('/(customer)');
+    } else {
+      router.replace('/(runner)');
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -70,11 +90,11 @@ export default function LocationPermission() {
 
         </View>
 
-        {/* --- 4. BUTTONS - fixed gap below text, NOT pinned via flex/mt-auto anymore --- */}
+        {/* --- 4. BUTTONS --- */}
         <View className="w-full mt-10 gap-2">
           <TouchableOpacity
             className="bg-primary rounded-xl py-4 items-center justify-center w-full"
-            onPress={() => router.push('/(customer)/index')}
+            onPress={handleAllowLocation}
             activeOpacity={0.85}
           >
             <Text className="text-white text-body font-gabarito">Allow Location Access</Text>
