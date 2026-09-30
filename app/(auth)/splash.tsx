@@ -10,6 +10,9 @@ import { Figtree_500Medium } from '@expo-google-fonts/figtree';
 // Import auth store
 import { useAuthStore } from '@/stores/authStore';
 
+// Import design tokens (prop-based usage)
+import { colors } from '@/constants/colors';
+
 export default function SplashScreen() {
   const [fontsLoaded] = useFonts({
     Gabarito_800ExtraBold,
@@ -30,12 +33,12 @@ export default function SplashScreen() {
         Animated.timing(animValue, {
           toValue: 1,
           duration: 600,
-          useNativeDriver: false,
+          useNativeDriver: true, // ← opacity + transform are natively drivable
         }),
         Animated.timing(animValue, {
           toValue: 0,
           duration: 600,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
       ]);
     };
@@ -77,7 +80,7 @@ export default function SplashScreen() {
   if (!fontsLoaded) {
     return (
       <View className="flex-1 items-center justify-center bg-primary">
-        <ActivityIndicator size="large" color="white" />
+        <ActivityIndicator size="large" color={colors.white} />
       </View>
     );
   }
@@ -92,11 +95,11 @@ export default function SplashScreen() {
     <View className="flex-1 items-center justify-center bg-primary">
       {/* --- CONTENT CONTAINER --- */}
       <View className="items-center gap-2">
-        
+
         {/* Brand Header: Icon Box + Title */}
         <View className="flex-row items-center gap-4">
           <View className="w-11 h-11 bg-white rounded-xl items-center justify-center">
-            <Feather name="x" size={26} color="#006B75" />
+            <Feather name="x" size={26} color={colors.primary} />
           </View>
 
           <Text className="text-white text-[37px] font-gabarito">
@@ -119,7 +122,7 @@ export default function SplashScreen() {
               width: 6,
               height: 6,
               borderRadius: 3,
-              backgroundColor: 'white',
+              backgroundColor: colors.white,
               opacity: dot.anim.interpolate({
                 inputRange: [0, 1],
                 outputRange: [0.3, 1],

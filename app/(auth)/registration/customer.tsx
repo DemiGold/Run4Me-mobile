@@ -1,161 +1,306 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-// Import fonts
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
-
-// Import auth store
 import { useAuthStore } from '@/stores/authStore';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { DatePickerField } from '@/components/ui/DatePickerField';
+import { colors } from '@/constants/colors';
+import {
+  isValidName,
+  isValidEmail,
+  isValidPhone,
+  sanitizeName,
+  sanitizePhone,
+} from '@/constants/validators';
+
+interface FieldErrors {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  dob?: string;
+  agree?: string;
+}
 
 export default function CustomerRegistration() {
-  const [fullName, setFullName] = useState('Chinedu Okafor');
-  const [email, setEmail] = useState('chinedu.okafor@outlook.com');
-  const [phone, setPhone] = useState('08034567890');
-  const [agree, setAgree] = useState(true);
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [dob, setDob] = useState<Date | null>(null);
+  const [agree, setAgree] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [loading, setLoading] = useState(false);
 
-  // Get setUser from auth store
   const setUser = useAuthStore((state) => state.setUser);
 
-  const [fontsLoaded] = useFonts({
-    Gabarito_800ExtraBold,
-    Figtree_500Medium,
-    Figtree_700Bold,
-  });
+  const { minDob, maxDob } = useMemo(() => {
+    const today = new Date();
+    const eighteenYearsAgo = new Date(
+      today.getFullYear() - 18,
+      today.getMonth(),
+      today.getDate(),
+    );
+    const oneHundredTwentyYearsAgo = new Date(today.getFullYear() - 120, 0, 1);
+    return { minDob: oneHundredTwentyYearsAgo, maxDob: eighteenYearsAgo };
+  }, []);
 
-  if (!fontsLoaded) {
-    return null;
-  }
+  // ─── Per-field validators (used on blur + on submit) ───
+  const validateName = (v: string): string | undefined => {
+    if (!v.trim()) return 'Enter your full name.';
+    if (!isValidName(v)) return 'Letters only, and include first + last name.';
+    return undefined;
+  };
 
-  const handleContinue = () => {
-    // Set user in auth store (would come from API in real app)
-    setUser({
-      id: `customer-${Date.now()}`,
-      role: 'customer',
-      email: email,
-      name: fullName,
+  const validateEmail = (v: string): string | undefined => {
+    if (!v.trim()) return 'Enter your email address.';
+    if (!isValidEmail(v)) return 'Enter a valid email address.';
+    return undefined;
+  };
+
+  const validatePhone = (v: string): string | undefined => {
+    if (!v.trim()) return 'Enter your phone number.';
+    if (!isValidPhone(v)) return 'Enter a valid Nigerian number (e.g. 08034567890).';
+    return undefined;
+  };
+
+  const validateDob = (v: Date | null): string | undefined => {
+    if (!v) return 'Select your date of birth.';
+    if (v > maxDob) return 'You must be at least 18 years old.';
+    return undefined;
+  };
+
+  const validateTerms = (v: boolean): string | undefined =>
+    v ? undefined : 'You must accept the terms to continue.';
+
+  // ─── Full-form validation for submit ───
+  const validate = (): boolean => {
+    const next: FieldErrors = {
+      fullName: validateName(fullName),
+      email: validateEmail(email),
+      phone: validatePhone(phone),
+      dob: validateDob(dob),
+      agree: validateTerms(agree),
+    };
+    // Strip undefined keys so the error object only has real errors
+    (Object.keys(next) as (keyof FieldErrors)[]).forEach((k) => {
+      if (!next[k]) delete next[k];
     });
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
 
-    // Navigate to OTP verification
-    router.push('/(auth)/otp');
+  const handleContinue = async () => {
+    if (!validate()) return;
+
+    setLoading(true);
+    try {
+      await new Promise((r) => setTimeout(r, 800));
+
+      setUser({
+        id: `customer-${Date.now()}`,
+        role: 'customer',
+        email: email.trim(),
+        name: fullName.trim(),
+      });
+
+      router.push({
+        pathname: '/(auth)/otp',
+        params: { identifier: phone.trim() },
+      });
+    } catch {
+      setErrors({ email: 'Something went wrong. Please try again.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-6 pt-4 pb-4">
-        <TouchableOpacity onPress={() => router.back()} className="p-1 w-8">
-          <Feather name="arrow-left" size={24} color="#0F172A" />
-        </TouchableOpacity>
+    <SafeAreaView className="flex-1 bg-surface">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        className="flex-1"
+      >
+        {/* top-section */}
+        <View className="gap-3">
+          <View className="flex-row items-center justify-between px-6 pt-4">
+            <TouchableOpacity
+              onPress={() => router.back()}
+              className="p-1 w-8"
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Feather name="arrow-left" size={24} color={colors.ink} />
+            </TouchableOpacity>
 
-        <Text className="text-[16px] font-gabarito text-text-dark text-center">Register Profile</Text>
+            <Text className="text-body font-gabarito text-ink text-center">
+              Register Profile
+            </Text>
 
-        <View className="flex-row items-center justify-end w-8">
-          <Text className="text-[14px] font-figtree-bold text-primary">1</Text>
-          <Text className="text-[14px] font-figtree text-text-light">/3</Text>
-        </View>
-      </View>
+            <View className="flex-row items-center justify-end w-8">
+              <Text className="text-body-sm font-figtree-bold text-primary">1</Text>
+              <Text className="text-body-sm font-figtree text-text-light">/3</Text>
+            </View>
+          </View>
 
-      {/* Progress Bar */}
-      <View className="h-1 bg-background-dark mx-6 rounded-full mb-12">
-        <View className="h-full bg-primary rounded-full w-1/3" />
-      </View>
-
-      {/* Form */}
-      <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
-        <Text className="text-heading-sm font-gabarito text-text-dark mb-1.5">
-          Create Customer Account
-        </Text>
-        <Text className="text-body-sm font-figtree text-text-gray leading-5 mb-7">
-          Let's get to know you. Please provide correct details.
-        </Text>
-
-        {/* Full Name */}
-        <Text className="text-body-sm font-figtree text-text-muted mb-2">
-          Full Name (First and Last name)
-        </Text>
-        <TextInput
-          className="border border-border rounded-xl px-4 py-3.5 text-[15px] font-figtree text-text-dark bg-background-light mb-5"
-          placeholder="Enter full name"
-          placeholderTextColor="#94A3B8"
-          value={fullName}
-          onChangeText={setFullName}
-        />
-
-        {/* Email */}
-        <Text className="text-body-sm font-figtree text-text-muted mb-2">
-          Email Address
-        </Text>
-        <TextInput
-          className="border border-border rounded-xl px-4 py-3.5 text-[15px] font-figtree text-text-dark bg-background-light mb-5"
-          placeholder="name@example.com"
-          placeholderTextColor="#94A3B8"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-        />
-
-        {/* Phone */}
-        <Text className="text-body-sm font-figtree text-text-muted mb-2">
-          Phone Number
-        </Text>
-        <View className="flex-row items-center border border-border rounded-xl px-4 bg-background-light mb-5">
-          <Feather name="phone" size={18} color="#94A3B8" className="mr-2.5" />
-          <TextInput
-            className="flex-1 py-3.5 text-[15px] font-figtree text-text-dark"
-            placeholder="08034567890"
-            placeholderTextColor="#94A3B8"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-          />
+          <View className="h-1.5 bg-border rounded-full mx-6 overflow-hidden">
+            <View className="h-full bg-primary rounded-full w-1/3" />
+          </View>
         </View>
 
-        {/* Date of Birth */}
-        <Text className="text-body-sm font-figtree text-text-muted mb-2">
-          Date of Birth
-        </Text>
-        <TouchableOpacity className="flex-row items-center justify-between border border-border rounded-xl px-4 py-3.5 bg-background-light mb-6">
-          <View className="flex-row items-center">
-            <Feather name="calendar" size={18} color="#94A3B8" className="mr-2.5" />
-            <Text className="text-[15px] font-figtree text-text-dark">14 / 09 / 1994</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Checkbox */}
-        <TouchableOpacity
-          className="flex-row items-start mt-2 mb-8"
-          onPress={() => setAgree(!agree)}
-          activeOpacity={0.8}
+        {/* registration-form */}
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingBottom: 24 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <View className={`
-            w-5 h-5 rounded-md border-2 mr-3 mt-0.5 items-center justify-center
-            ${agree ? 'bg-primary border-primary' : 'border-border-light bg-transparent'}
-          `}>
-            {agree && <Feather name="check" size={12} color="white" />}
-          </View>
-          <Text className="flex-1 text-[13px] font-figtree text-text-muted leading-5">
-            I agree to Run4Me's{' '}
-            <Text className="font-figtree-bold text-primary">Terms of Service</Text> and{' '}
-            <Text className="font-figtree-bold text-primary">Privacy Policy</Text>
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <View className="px-6 pt-6 gap-5">
+            <View>
+              <Text className="text-heading-sm font-gabarito text-ink mb-1.5">
+                Create Customer Account
+              </Text>
+              <Text className="text-body-sm font-figtree text-muted">
+                Let's get to know you. Please provide correct details.
+              </Text>
+            </View>
 
-      {/* Bottom Button */}
-      <View className="px-6 pb-6 pt-3 bg-white">
-        <TouchableOpacity
-          className="bg-primary rounded-xl py-4 items-center"
-          onPress={handleContinue}
-        >
-          <Text className="text-white text-body font-gabarito">Continue</Text>
-        </TouchableOpacity>
-      </View>
+            {/* Full Name */}
+            <Input
+              label="Full Name (First and Last name)"
+              value={fullName}
+              onChangeText={(v) => {
+                setFullName(sanitizeName(v));
+                if (errors.fullName)
+                  setErrors({ ...errors, fullName: undefined });
+              }}
+              onBlur={() => {
+                if (fullName)
+                  setErrors({ ...errors, fullName: validateName(fullName) });
+              }}
+              placeholder="Enter full name"
+              autoCapitalize="words"
+              autoComplete="name"
+              error={errors.fullName}
+              editable={!loading}
+            />
+
+            {/* Email */}
+            <Input
+              label="Email Address"
+              value={email}
+              onChangeText={(v) => {
+                setEmail(v.trimStart());
+                if (errors.email) setErrors({ ...errors, email: undefined });
+              }}
+              onBlur={() => {
+                if (email)
+                  setErrors({ ...errors, email: validateEmail(email) });
+              }}
+              placeholder="name@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              error={errors.email}
+              editable={!loading}
+            />
+
+            {/* Phone */}
+            <Input
+              label="Phone Number"
+              value={phone}
+              onChangeText={(v) => {
+                setPhone(sanitizePhone(v));
+                if (errors.phone) setErrors({ ...errors, phone: undefined });
+              }}
+              onBlur={() => {
+                if (phone)
+                  setErrors({ ...errors, phone: validatePhone(phone) });
+              }}
+              placeholder="08034567890"
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              leftIcon={<Feather name="phone" size={18} color={colors.subtle} />}
+              error={errors.phone}
+              editable={!loading}
+            />
+
+            {/* Date of Birth */}
+            <DatePickerField
+              label="Date of Birth"
+              value={dob}
+              onChange={(d) => {
+                if (!(d instanceof Date) || isNaN(d.getTime())) return;
+                setDob(d);
+                if (errors.dob) setErrors({ ...errors, dob: undefined });
+              }}
+              placeholder="DD / MM / YYYY"
+              error={errors.dob}
+              minimumDate={minDob}
+              maximumDate={maxDob}
+              editable={!loading}
+            />
+
+            {/* checkbox-terms */}
+            <View>
+              <TouchableOpacity
+                className="flex-row items-start"
+                onPress={() => {
+                  setAgree(!agree);
+                  if (errors.agree) setErrors({ ...errors, agree: undefined });
+                }}
+                activeOpacity={0.8}
+                disabled={loading}
+              >
+                <View
+                  className={`
+                    w-5 h-5 rounded-md border-2 mr-3 mt-0.5 items-center justify-center
+                    ${agree ? 'bg-primary border-primary' : 'border-border-light bg-transparent'}
+                  `}
+                >
+                  {agree && <Feather name="check" size={12} color={colors.white} />}
+                </View>
+                <Text className="flex-1 text-body-xs font-figtree text-muted">
+                  I agree to Run4Me's{' '}
+                  <Text className="text-body-xs font-figtree-bold text-primary">
+                    Terms of Service
+                  </Text>{' '}
+                  and{' '}
+                  <Text className="text-body-xs font-figtree-bold text-primary">
+                    Privacy Policy
+                  </Text>
+                </Text>
+              </TouchableOpacity>
+
+              {errors.agree ? (
+                <Text className="text-body-xs font-figtree text-status-error mt-1.5 ml-8">
+                  {errors.agree}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* bottom-section */}
+        <View className="px-6 pb-6 pt-3 bg-surface">
+          <Button
+            variant="primary"
+            fullWidth
+            loading={loading}
+            onPress={handleContinue}
+          >
+            Continue
+          </Button>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

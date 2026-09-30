@@ -4,24 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-// Import fonts
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { colors } from '@/constants/colors';
 
 type RoleType = 'customer' | 'runner';
 
 export default function ChooseAccountType() {
   const [selectedRole, setSelectedRole] = useState<RoleType | null>('customer');
-
-  const [fontsLoaded] = useFonts({
-    Gabarito_800ExtraBold,
-    Figtree_500Medium,
-    Figtree_700Bold,
-  });
-
-  if (!fontsLoaded) {
-    return null;
-  }
 
   const handleProceed = (role: RoleType) => {
     if (role === 'customer') {
@@ -32,133 +20,135 @@ export default function ChooseAccountType() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white px-6">
-
-      {/* Single centered block: logo, heading, and both cards move together */}
+    <SafeAreaView className="flex-1 bg-surface px-6">
       <View className="flex-1 justify-center">
 
         {/* Header */}
         <View className="mb-6">
           <View className="flex-row items-center gap-2 mb-4">
             <View className="w-7 h-7 rounded-lg bg-primary items-center justify-center">
-              <Feather name="x" size={16} color="white" />
+              <Feather name="x" size={16} color={colors.white} />
             </View>
-            <Text className="text-[18px] font-gabarito text-primary">
-              Run<Text className="text-secondary">4</Text>Me
+            <Text className="text-title font-gabarito text-primary">
+              Run<Text className="text-accent">4</Text>Me
             </Text>
           </View>
 
-          <Text className="text-[24px] font-gabarito text-text-dark leading-8 w-full">
+          <Text className="text-heading font-gabarito text-ink">
             How would you like to use Run4Me?
           </Text>
         </View>
 
-        {/* Cards - gap only between them, no extra centering of their own */}
+        {/* Cards */}
         <View className="gap-4">
 
-        {/* --- CUSTOMER CARD --- */}
-        <TouchableOpacity
-          className={`
-            border-2 rounded-2xl p-5
-            ${selectedRole === 'customer'
-              ? 'border-primary bg-teal-50'
-              : 'border-border bg-white'
-            }
-          `}
-          onPress={() => setSelectedRole('customer')}
-          activeOpacity={0.7}
-        >
-          <View className="flex-row justify-between items-center mb-2.5">
-            <View className="bg-primary-light px-2.5 py-1 rounded">
-              <Text className="text-[10px] font-figtree-bold text-primary tracking-wider">
-                CUSTOMER / BOSS
-              </Text>
-            </View>
-            <Feather
-              name={selectedRole === 'customer' ? 'check-circle' : 'circle'}
-              size={22}
-              color={selectedRole === 'customer' ? '#006B75' : '#CBD5E1'}
-            />
-          </View>
-
-          <Text className="text-[18px] font-gabarito text-text-dark mb-1.5">
-            I want to delegate tasks
-          </Text>
-          <Text className="text-[13px] font-figtree text-text-gray leading-5 mb-4">
-            Need someone to run an errand for you? Request shopping, pick-ups, document delivery & more.
-          </Text>
-
+          {/* --- CUSTOMER CARD --- */}
           <TouchableOpacity
-            onPress={() => handleProceed('customer')}
-            activeOpacity={0.8}
             className={`
-              py-3 rounded-xl items-center justify-center w-full
+              border-2 rounded-3xl p-5
               ${selectedRole === 'customer'
-                ? 'bg-primary'
-                : 'bg-transparent border border-border'
+                ? 'border-primary bg-primary-light'
+                : 'border-border bg-surface'
               }
             `}
+            onPress={() => setSelectedRole('customer')}
+            activeOpacity={0.7}
           >
-            <Text className={`
-              text-[14px] font-figtree-bold text-center
-              ${selectedRole === 'customer' ? 'text-white' : 'text-text-muted'}
-            `}>
-              Continue as Customer
-            </Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-
-        {/* --- RUNNER CARD --- */}
-        <TouchableOpacity
-          className={`
-            border-2 rounded-2xl p-5
-            ${selectedRole === 'runner'
-              ? 'border-secondary bg-orange-50'
-              : 'border-border bg-white'
-            }
-          `}
-          onPress={() => setSelectedRole('runner')}
-          activeOpacity={0.7}
-        >
-          <View className="flex-row justify-between items-center mb-2.5">
-            <View className="bg-secondary-light px-2.5 py-1 rounded">
-              <Text className="text-[10px] font-figtree-bold text-secondary tracking-wider">
-                RUNNER / AGENT
-              </Text>
+            <View className="flex-row justify-between items-center mb-2.5">
+              <View className="bg-primary-light px-3 py-1.5 rounded-lg">
+                <Text className="text-micro font-figtree-bold text-primary tracking-wider">
+                  CUSTOMER / BOSS
+                </Text>
+              </View>
+              <Feather
+                name={selectedRole === 'customer' ? 'check-circle' : 'circle'}
+                size={22}
+                color={selectedRole === 'customer' ? colors.primary : colors.borderLight}
+              />
             </View>
-            <Feather
-              name={selectedRole === 'runner' ? 'check-circle' : 'circle'}
-              size={22}
-              color={selectedRole === 'runner' ? '#FF9F1C' : '#CBD5E1'}
-            />
-          </View>
 
-          <Text className="text-[18px] font-gabarito text-text-dark mb-1.5">
-            I want to earn money
-          </Text>
-          <Text className="text-[13px] font-figtree text-text-gray leading-5 mb-4">
-            Earn money by helping people in your city complete errands. Be your own boss.
-          </Text>
+            <Text className="text-title font-gabarito-bold text-ink mb-1.5">
+              I want to delegate tasks
+            </Text>
+            <Text className="text-body-sm font-figtree text-muted mb-4">
+              Need someone to run an errand for you? Request shopping, pick-ups, document delivery & more.
+            </Text>
 
+            <TouchableOpacity
+              onPress={() => handleProceed('customer')}
+              activeOpacity={0.8}
+              className={`
+                py-4 rounded-2xl items-center justify-center w-full
+                ${selectedRole === 'customer'
+                  ? 'bg-primary'
+                  : 'bg-transparent border border-border'
+                }
+              `}
+            >
+              <Text
+                className={`
+                  text-body-sm font-figtree-bold text-center
+                  ${selectedRole === 'customer' ? 'text-white' : 'text-muted'}
+                `}
+              >
+                Continue as Customer
+              </Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+
+          {/* --- RUNNER CARD --- */}
           <TouchableOpacity
-            onPress={() => handleProceed('runner')}
-            activeOpacity={0.8}
             className={`
-              py-3 rounded-xl items-center justify-center w-full
+              border-2 rounded-3xl p-5
               ${selectedRole === 'runner'
-                ? 'bg-secondary'
-                : 'bg-transparent border border-border'
+                ? 'border-accent bg-accent-light'
+                : 'border-border bg-surface'
               }
             `}
+            onPress={() => setSelectedRole('runner')}
+            activeOpacity={0.7}
           >
-            <Text className={`
-              text-[14px] font-figtree-bold text-center
-              ${selectedRole === 'runner' ? 'text-white' : 'text-text-muted'}
-            `}>
-              Continue as Runner
+            <View className="flex-row justify-between items-center mb-2.5">
+              <View className="bg-accent-light px-3 py-1.5 rounded-lg">
+                <Text className="text-micro font-figtree-bold text-accent tracking-wider">
+                  RUNNER / AGENT
+                </Text>
+              </View>
+              <Feather
+                name={selectedRole === 'runner' ? 'check-circle' : 'circle'}
+                size={22}
+                color={selectedRole === 'runner' ? colors.accent : colors.borderLight}
+              />
+            </View>
+
+            <Text className="text-title font-gabarito-bold text-ink mb-1.5">
+              I want to earn money
             </Text>
+            <Text className="text-body-sm font-figtree text-muted mb-4">
+              Earn money by helping people in your city complete errands. Be your own boss.
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => handleProceed('runner')}
+              activeOpacity={0.8}
+              className={`
+                py-4 rounded-2xl items-center justify-center w-full
+                ${selectedRole === 'runner'
+                  ? 'bg-accent'
+                  : 'bg-transparent border border-border'
+                }
+              `}
+            >
+              <Text
+                className={`
+                  text-body-sm font-figtree-bold text-center
+                  ${selectedRole === 'runner' ? 'text-white' : 'text-muted'}
+                `}
+              >
+                Continue as Runner
+              </Text>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
 
         </View>
       </View>

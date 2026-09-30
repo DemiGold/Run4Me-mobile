@@ -37,8 +37,11 @@ export default function IdentityVerification() {
       name: 'Tobi Adebayo',
     });
 
-    // Navigate directly to runner dashboard
-    router.replace('/(runner)');
+    // Route through location permission before entering the dashboard
+    router.replace({
+      pathname: '/(auth)/location-permission',
+      params: { role: 'runner' },
+    });
   };
 
   return (
