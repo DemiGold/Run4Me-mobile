@@ -7,7 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
 import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
 
-const MAP_IMAGE = require('../../../assets/map.png');
+const MAP_IMAGE = require('@/assets/map.png');
 
 const RECENT_LOCATIONS = [
   {
@@ -41,7 +41,7 @@ export default function PickupLocation() {
 
   const handleConfirm = () => {
     router.push({
-      pathname: '/(errand)/create-errand/delivery',
+      pathname: '/(customer)/errand/delivery',
       params: {
         type: type ?? '',
         promo: promo ?? '',

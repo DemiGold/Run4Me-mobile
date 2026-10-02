@@ -30,7 +30,7 @@ export default function ErrandInstructions() {
 
   const handleContinue = () => {
     router.push({
-      pathname: '/(errand)/create-errand/timeline',
+      pathname: '/(customer)/errand/timeline',
       params: {
         type: type ?? '',
         promo: promo ?? '',

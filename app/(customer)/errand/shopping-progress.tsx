@@ -29,7 +29,7 @@ const CHECKLIST: ChecklistItem[] = [
   { id: '4', name: 'Kellogg Cornflakes Large', price: 'Pending', status: 'pending' },
 ];
 
-const PRODUCT_IMAGE = require('../../assets/map.png'); // swap for product img later
+const PRODUCT_IMAGE = require('@/assets/map.png'); // swap for product img later
 
 export default function ShoppingProgress() {
   const params = useLocalSearchParams<{
@@ -48,7 +48,7 @@ export default function ShoppingProgress() {
 
   const handleApprove = () => {
     router.replace({
-      pathname: '/(errand)/receipt',
+      pathname: '/(customer)/errand/receipt',
       params,
     });
   };

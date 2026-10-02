@@ -8,7 +8,7 @@ import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
 import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
 
 const { width } = Dimensions.get('window');
-const MAP_IMAGE = require('../../assets/map.png');
+const MAP_IMAGE = require('@/assets/map.png');
 
 // Mock errand data — will come from API once endpoint lands
 const ACTIVE_ERRAND = {

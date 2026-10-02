@@ -16,7 +16,7 @@ import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
 
 const { height } = Dimensions.get('window');
 const MAP_HEIGHT = height * 0.30;
-const MAP_IMAGE = require('../../../assets/map.png');
+const MAP_IMAGE = require('@/assets/map.png');
 
 type Runner = {
   id: string;
@@ -91,7 +91,7 @@ export default function AvailableRunners() {
 
   const handleAccept = (runner: Runner) => {
     router.replace({
-      pathname: '/(errand)/create-errand/runner-secured',
+      pathname: '/(customer)/errand/runner-secured',
       params: {
         ...params,
         runnerId: runner.id,

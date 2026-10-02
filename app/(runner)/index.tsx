@@ -171,7 +171,7 @@ function ErrandCard({ id, tag, price, pickup, dropoff, distance, eta }: Errand) 
           className="bg-primary rounded-xl px-5 py-2.5"
           onPress={() =>
             router.push({
-              pathname: '/(modals)/errand-detail',   // 👈 changed
+              pathname: '/(runner)/modals/errand-detail',   // 👈 changed
               params: { id },
             })
           }

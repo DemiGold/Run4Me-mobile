@@ -1,39 +1,71 @@
 import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
+import { colors } from '@/constants/colors';
+
 export default function CustomerLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#006B75',
-        tabBarInactiveTintColor: '#94A3B8',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.subtle,
         tabBarStyle: {
           borderTopWidth: 1,
-          borderTopColor: '#E2E8F0',
+          borderTopColor: colors.borderDefault,
           height: 60,
           paddingBottom: 8,
           paddingTop: 8,
+          backgroundColor: colors.surface,
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontFamily: 'Figtree_500Medium',
+          fontFamily: 'Figtree_400Regular',
         },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color, size }) => <Feather name="home" size={size} color={color} /> }} />
-      <Tabs.Screen name="activity" options={{ title: 'Activity', tabBarIcon: ({ color, size }) => <Feather name="activity" size={size} color={color} /> }} />
-      <Tabs.Screen name="wallet" options={{ title: 'Wallet', tabBarIcon: ({ color, size }) => <Feather name="credit-card" size={size} color={color} /> }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color, size }) => <Feather name="user" size={size} color={color} /> }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="home" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="activity"
+        options={{
+          title: 'Activity',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="activity" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="wallet"
+        options={{
+          title: 'Wallet',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="credit-card" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="user" size={size} color={color} />
+          ),
+        }}
+      />
 
-      {/* Hidden routes */}
-      <Tabs.Screen name="saved-addresses" options={{ href: null }} />
-      <Tabs.Screen name="settings" options={{ href: null }} />
-      <Tabs.Screen name="help" options={{ href: null }} />
-      <Tabs.Screen name="faq" options={{ href: null }} />
-      <Tabs.Screen name="contact" options={{ href: null }} />
-      <Tabs.Screen name="safety" options={{ href: null }} />
-      <Tabs.Screen name="legal" options={{ href: null }} />
+      {/* Hidden sub-stacks — not tabs */}
+      <Tabs.Screen name="errand"  options={{ href: null }} />
+      <Tabs.Screen name="account" options={{ href: null }} />
+
+      {/* Notifications — reached from Home bell */}
       <Tabs.Screen name="notifications" options={{ href: null }} />
     </Tabs>
   );

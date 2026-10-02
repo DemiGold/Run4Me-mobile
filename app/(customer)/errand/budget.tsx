@@ -35,7 +35,7 @@ export default function ErrandBudget() {
 
   const handleContinue = () => {
     router.push({
-      pathname: '/(errand)/create-errand/instructions',
+      pathname: '/(customer)/errand/instructions',
       params: {
         type: type ?? '',
         promo: promo ?? '',

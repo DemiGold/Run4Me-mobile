@@ -13,7 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
 import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
 
-const RECEIPT_IMAGE = require('../../assets/receipt-photo.png'); 
+const RECEIPT_IMAGE = require('@/assets/receipt-photo.png'); 
 
 const PURCHASED_ITEMS = [
   { id: '1', name: 'Golden Penny Pasta x2', price: '₦1,200' },
@@ -43,7 +43,7 @@ export default function ReceiptBilling() {
 
   const handleContinue = () => {
     router.replace({
-      pathname: '/(errand)/confirm-delivery',
+      pathname: '/(customer)/errand/confirm-delivery',
       params,
     });
   };
