@@ -84,7 +84,7 @@ export default function Checkout() {
   const handleConfirm = () => {
     // Navigate to finding-runner (which auto-forwards to runner-secured)
     router.replace({
-      pathname: '/(errand)/create-errand/finding-runner',
+      pathname: '/(customer)/errand/finding-runner',
       params: { ...params, paymentMethod: selected },
     });
   };

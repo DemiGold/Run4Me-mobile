@@ -73,7 +73,7 @@ export default function CustomerHome() {
         <TouchableOpacity
           onPress={() =>
             router.push({
-              pathname: '/(errand)/create-errand/select-type',
+              pathname: '/(customer)/errand/select-type',
               params: { promo: 'FIRST4ME' },
             })
           }
@@ -108,7 +108,7 @@ export default function CustomerHome() {
                 activeOpacity={0.8}
                 onPress={() =>
                   router.push({
-                    pathname: '/(errand)/create-errand/select-type',
+                    pathname: '/(customer)/errand/select-type',
                     params: { type: service.id },
                   })
                 }

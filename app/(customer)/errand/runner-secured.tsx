@@ -14,7 +14,7 @@ import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
 
 const { height } = Dimensions.get('window');
 const MAP_HEIGHT = height * 0.55;
-const MAP_IMAGE = require('../../../assets/map.png');
+const MAP_IMAGE = require('@/assets/map.png');
 
 const FALLBACK_RUNNER = {
   name: 'David Adeyemi',
@@ -60,7 +60,7 @@ export default function RunnerSecured() {
 
   const handleConfirm = () => {
     router.replace({
-      pathname: '/(errand)/create-errand/errand-confirmed',
+      pathname: '/(customer)/errand/errand-confirmed',
       params: {
         ...params,
         runnerName,

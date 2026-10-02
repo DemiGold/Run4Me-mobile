@@ -30,7 +30,7 @@ export default function CustomerProfile() {
         <Text className="text-[20px] font-gabarito text-text-dark">My Profile</Text>
 
         <TouchableOpacity
-          onPress={() => router.push('/(customer)/settings')}
+          onPress={() => router.push('/(customer)/account/settings')}
           className="w-9 h-9 items-center justify-center"
         >
           <Feather name="settings" size={20} color="#0F172A" />

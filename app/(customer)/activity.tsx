@@ -52,7 +52,7 @@ export default function CustomerActivity() {
   const handleCardPress = (item: Activity) => {
     if (item.status === 'ACTIVE') {
       router.push({
-        pathname: '/(errand)/live-tracking',
+        pathname: '/(customer)/errand/live-tracking',
         params: { id: item.id },
       });
     }

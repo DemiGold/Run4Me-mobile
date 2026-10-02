@@ -56,7 +56,7 @@ export default function DeliveryLocation() {
     }
 
     router.push({
-      pathname: '/(errand)/create-errand/items',
+      pathname: '/(customer)/errand/items',
       params: {
         type: type ?? '',
         promo: promo ?? '',

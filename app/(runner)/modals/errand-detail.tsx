@@ -11,7 +11,7 @@ const { width, height } = Dimensions.get('window');
 const MAP_HEIGHT = height * 0.48;
 const EXPIRY_SECONDS = 24;
 
-const MAP_IMAGE = require('../../assets/map.png');
+const MAP_IMAGE = require('@/assets/map.png');
 
 const ERRANDS_DATA: Record<string, any> = {
   '1': {
@@ -211,7 +211,7 @@ export default function ErrandDetail() {
               className="flex-1 bg-primary rounded-2xl py-4 items-center"
               onPress={() =>
                 router.push({
-                  pathname: '/(modals)/active-errand',   // 👈 changed
+                  pathname: '/(runner)/modals/active-errand',   // 👈 changed
                   params: { id: errand.id },
                 })
               }

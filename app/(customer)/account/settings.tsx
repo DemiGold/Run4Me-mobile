@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useAuthStore } from '../../stores/authStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
 import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
 
@@ -64,7 +64,7 @@ export default function Settings() {
             label="Saved Locations"
             value="3 Addresses"
             last
-            onPress={() => router.push('/(customer)/saved-addresses')}
+            onPress={() => router.push('/(customer)/account/saved-addresses')}
           />
 
           {/* ═══ PAYMENT & WALLET ═══ */}
@@ -86,17 +86,17 @@ export default function Settings() {
           <Row
             label="Safety Center"
             value=""
-            onPress={() => router.push('/(customer)/safety')}
+            onPress={() => router.push('/(customer)/account/safety')}
           />
           <Row label="Delete Account" value="" danger last />
 
           {/* ═══ SUPPORT ═══ */}
           <Section label="SUPPORT" />
-          <Row label="Help Center" value="" onPress={() => router.push('/(customer)/help')} />
-          <Row label="Frequently Asked" value="" onPress={() => router.push('/(customer)/faq')} />
-          <Row label="Get in Touch" value="" onPress={() => router.push('/(customer)/contact')} />
+          <Row label="Help Center" value="" onPress={() => router.push('/(customer)/account/help')} />
+          <Row label="Frequently Asked" value="" onPress={() => router.push('/(customer)/account/faq')} />
+          <Row label="Get in Touch" value="" onPress={() => router.push('/(customer)/account/contact')} />
           <Row label="Notifications" value="" onPress={() => router.push('/(customer)/notifications')} />
-          <Row label="Legal & Policies" value="" last onPress={() => router.push('/(customer)/legal')} />
+          <Row label="Legal & Policies" value="" last onPress={() => router.push('/(customer)/account/legal')} />
 
           {/* ═══ PREFERENCES ═══ */}
           <Section label="PREFERENCES" />

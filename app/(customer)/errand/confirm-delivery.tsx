@@ -26,7 +26,7 @@ export default function ConfirmDelivery() {
 
   const handleContinue = () => {
     router.replace({
-      pathname: '/(errand)/rate-runner',
+      pathname: '/(customer)/errand/rate-runner',
       params,
     });
   };

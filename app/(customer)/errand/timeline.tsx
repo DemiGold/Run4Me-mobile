@@ -40,7 +40,7 @@ export default function DeliveryPreference() {
 
   const handleContinue = () => {
     router.push({
-      pathname: '/(errand)/create-errand/checkout',
+      pathname: '/(customer)/errand/checkout',
       params: {
         type: type ?? '',
         promo: promo ?? '',

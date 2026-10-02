@@ -8,7 +8,7 @@ import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
 
 const { height } = Dimensions.get('window');
 const MAP_HEIGHT = height * 0.62;
-const MAP_IMAGE = require('../../../assets/map.png');
+const MAP_IMAGE = require('@/assets/map.png');
 
 export default function FindingRunner() {
   const params = useLocalSearchParams<{
@@ -39,7 +39,7 @@ export default function FindingRunner() {
 
     const timeout = setTimeout(() => {
       router.replace({
-        pathname: '/(errand)/create-errand/available-runners',
+        pathname: '/(customer)/errand/available-runners',
         params,
       });
     }, 5000);

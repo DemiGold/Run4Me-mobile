@@ -55,7 +55,7 @@ export default function ErrandConfirmed() {
 
   const handleTrack = () => {
     router.replace({
-      pathname: '/(errand)/live-tracking',
+      pathname: '/(customer)/errand/live-tracking',
       params,
     });
   };

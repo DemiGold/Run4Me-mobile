@@ -38,7 +38,7 @@ export default function SelectErrandType() {
 
   const handleSelect = (typeId: string) => {
     router.push({
-      pathname: '/(errand)/create-errand/pickup',
+      pathname: '/(customer)/errand/pickup',
       params: { type: typeId, promo: promo ?? '' },
     });
   };

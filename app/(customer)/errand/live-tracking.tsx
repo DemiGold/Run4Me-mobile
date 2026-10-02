@@ -16,7 +16,7 @@ import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
 
 const { height } = Dimensions.get('window');
 const MAP_HEIGHT = height * 0.52;
-const MAP_IMAGE = require('../../assets/map.png');
+const MAP_IMAGE = require('@/assets/map.png');
 
 // Progress steps — matches Figma
 const STEPS = [
@@ -206,7 +206,7 @@ export default function LiveTracking() {
       <TouchableOpacity
         onPress={() =>
           router.replace({
-            pathname: '/(errand)/shopping-progress',
+            pathname: '/(customer)/errand/shopping-progress',
             params,
           })
         }
