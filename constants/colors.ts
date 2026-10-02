@@ -33,7 +33,7 @@ export const colors = {
   bgDark:    '#F1F5F9',
 
   // ─── Borders ───
-  borderDefault: '#E2E8F0',
+  borderDefault: '#DCE5EF',   // ← was '#E2E8F0'
   borderLight:   '#CBD5E1',
   borderMuted:   '#F1F5F9',
 

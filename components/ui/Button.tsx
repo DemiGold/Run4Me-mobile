@@ -13,22 +13,29 @@ import { colors } from '@/constants/colors';
 // ─────────────────────────────────────────────────────────────
 // Button — Run4Me design system primitive
 //
-// Figma spec:
-//   Height  52px (py-4 + body-sm LH 20)
-//   Radius  16px (rounded-2xl)
-//   Padding 16px horizontal (px-4)
+// Figma: Components / Buttons
+//   Height   52px (md) · 40px (sm)
+//   Radius   16px (md) · 14px (sm)
+//   Padding  16px horizontal
+//   Label    Figtree 700 Bold, 16px, LH 100%
 //
 // Variants:
-//   primary  — teal filled (main CTA)
-//   accent   — orange filled (runner CTA)
-//   outline  — transparent bg + border (secondary action)
-//   ghost    — transparent bg, no border (link-style action)
-//
-// Variants yet to sample from Figma: 'danger', 'success'
-// — add when a screen needs them.
+//   primary      — teal filled (main CTA)
+//   secondary    — white bg + #DCE5EF border, ink text
+//                  ('outline' kept as legacy alias)
+//   destructive  — #FEE2E2 bg + #EF4444 text
+//   accent       — orange filled (runner CTAs)
+//   ghost        — transparent, primary text
 // ─────────────────────────────────────────────────────────────
 
-type ButtonVariant = 'primary' | 'accent' | 'outline' | 'ghost';
+type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'outline'      // legacy alias → 'secondary'
+  | 'destructive'
+  | 'accent'
+  | 'ghost';
+
 type ButtonSize = 'md' | 'sm';
 
 interface ButtonProps {
@@ -46,9 +53,8 @@ interface ButtonProps {
   style?: StyleProp<ViewStyle>;
 }
 
-// Variant → bg / border / text classes
 const variantStyles: Record<
-  ButtonVariant,
+  Exclude<ButtonVariant, 'outline'>,
   { container: string; text: string; spinner: string }
 > = {
   primary: {
@@ -56,15 +62,20 @@ const variantStyles: Record<
     text: 'text-white',
     spinner: colors.white,
   },
+  secondary: {
+    container: 'bg-surface border border-border',
+    text: 'text-ink',
+    spinner: colors.ink,
+  },
+  destructive: {
+    container: 'bg-status-errorLight border border-status-errorLight',
+    text: 'text-status-error',
+    spinner: colors.danger,
+  },
   accent: {
     container: 'bg-accent border border-accent',
     text: 'text-white',
     spinner: colors.white,
-  },
-  outline: {
-    container: 'bg-transparent border border-border',
-    text: 'text-muted',
-    spinner: colors.muted,
   },
   ghost: {
     container: 'bg-transparent',
@@ -73,11 +84,11 @@ const variantStyles: Record<
   },
 };
 
-// Size → height + horizontal padding
-// md = 52px (py-4 + 20px line-height), sm = 40px (py-2.5 + 20px)
+// Size → fixed height + radius + horizontal padding.
+// Height is explicit (not py-*) so the 16px label centers cleanly.
 const sizeStyles: Record<ButtonSize, string> = {
-  md: 'py-4 px-4 rounded-2xl',
-  sm: 'py-2.5 px-3 rounded-xl',
+  md: 'h-[52px] px-4 rounded-2xl',
+  sm: 'h-10 px-3 rounded-xl',
 };
 
 export function Button({
@@ -94,13 +105,14 @@ export function Button({
   textClassName = '',
   style,
 }: ButtonProps) {
-  const v = variantStyles[variant];
+  const resolved = variant === 'outline' ? 'secondary' : variant;
+  const v = variantStyles[resolved];
   const isInteractive = !disabled && !loading;
 
   return (
     <TouchableOpacity
       onPress={isInteractive ? onPress : undefined}
-      activeOpacity={isInteractive ? 0.8 : 1}
+      activeOpacity={isInteractive ? 0.85 : 1}
       disabled={!isInteractive}
       style={style}
       className={`
@@ -112,18 +124,16 @@ export function Button({
         ${className}
       `}
     >
-      {/* Left icon */}
       {leftIcon && !loading ? (
         <View className="mr-2">{leftIcon}</View>
       ) : null}
 
-      {/* Label or spinner */}
       {loading ? (
         <ActivityIndicator size="small" color={v.spinner} />
       ) : (
         <Text
           className={`
-            text-body-sm font-figtree-bold text-center
+            text-body font-figtree-bold text-center
             ${v.text}
             ${textClassName}
           `}
@@ -132,7 +142,6 @@ export function Button({
         </Text>
       )}
 
-      {/* Right icon */}
       {rightIcon && !loading ? (
         <View className="ml-2">{rightIcon}</View>
       ) : null}

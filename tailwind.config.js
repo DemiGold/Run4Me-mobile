@@ -61,7 +61,7 @@ const orange = {
 const slate = {
   50:  '#F8FAFC',
   100: '#F1F5F9',
-  200: '#E2E8F0',
+  200: '#DCE5EF',   // ← was '#E2E8F0'
   300: '#CBD5E1',
   400: '#94A3B8',
   600: '#475569',
@@ -193,6 +193,7 @@ module.exports = {
         '12.5': '50px',
       },
       borderRadius: {
+        'field': '12px',
         'xl':  '14px',
         '2xl': '16px',
         '3xl': '20px',   // Figma card radius

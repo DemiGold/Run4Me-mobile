@@ -11,16 +11,20 @@ import { colors } from '@/constants/colors';
 // ─────────────────────────────────────────────────────────────
 // Input — Run4Me design system primitive
 //
-// Figma spec:
-//   Height      52px (py-3.5 + body LH 24)
-//   Radius      16px (rounded-2xl)
-//   Border      1px #E2E8F0
-//   Background  #F8FAFC (background-light)
-//   Label       body-sm Figtree 400 muted, mb-2
+// Figma: Components / Text fields
+//   Height   56px (fixed)
+//   Radius   12px
+//   Border   1px #DCE5EF (default) · primary (focused) · danger (error)
+//   Padding  16px horizontal
+//   Background #FFFFFF
 //
-// Supports optional leading icon (e.g. phone, calendar), an
-// error message, helper text, and an onBlur callback so parent
-// screens can validate per-field when the user leaves the field.
+// Labels come in two flavors across the app:
+//   - sentence case (auth screens): "Full Name"
+//   - UPPERCASE micro (profile / payment): "CARD NUMBER"
+// Controlled via the `uppercaseLabel` prop.
+//
+// Supports optional leading icon, error message, helper text,
+// and an onBlur callback for per-field validation.
 // ─────────────────────────────────────────────────────────────
 
 interface InputProps {
@@ -36,7 +40,8 @@ interface InputProps {
   secureTextEntry?: boolean;
   keyboardType?: KeyboardTypeOptions;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-  autoComplete?: 'email' | 'tel' | 'name' | 'off';
+  autoComplete?: 'email' | 'tel' | 'name' | 'off' | 'cc-number';
+  uppercaseLabel?: boolean;
   className?: string;
   inputClassName?: string;
 }
@@ -55,6 +60,7 @@ export function Input({
   keyboardType = 'default',
   autoCapitalize = 'none',
   autoComplete = 'off',
+  uppercaseLabel = false,
   className = '',
   inputClassName = '',
 }: InputProps) {
@@ -66,26 +72,29 @@ export function Input({
     ? 'border-primary'
     : 'border-border';
 
+  // Two label styles — sentence-case (auth) vs uppercase micro (profile/payment)
+  const labelClass = uppercaseLabel
+    ? 'text-micro font-figtree-bold text-muted uppercase tracking-wider mb-2'
+    : 'text-body-sm font-figtree text-muted mb-2';
+
   return (
     <View className={className}>
       {/* Label */}
-      <Text className="text-body-sm font-figtree text-muted mb-2">
-        {label}
-      </Text>
+      <Text className={labelClass}>{label}</Text>
 
-      {/* Field */}
+      {/* Field — fixed 56px height per Figma, so no py-* on the TextInput */}
       <View
         className={`
           flex-row items-center
-          border rounded-2xl px-4
-          bg-background-light
+          h-14 rounded-field px-4 border
+          bg-surface
           ${borderClass}
         `}
       >
         {leftIcon ? <View className="mr-2.5">{leftIcon}</View> : null}
         <TextInput
           className={`
-            flex-1 py-3.5 text-body font-figtree text-ink
+            flex-1 text-body font-figtree text-ink
             ${inputClassName}
           `}
           value={value}
