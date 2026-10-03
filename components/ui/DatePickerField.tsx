@@ -16,7 +16,10 @@ import { colors } from '@/constants/colors';
 // DatePickerField — Run4Me design system primitive
 //
 // Android → native dialog · iOS → custom slide-up modal
-// Figma format: DD / MM / YYYY
+// Default display format: DD / MM / YYYY
+//
+// Pass `formatDisplay` to override the displayed text. Used by
+// the profile screen for a word-format ("April 12, 1995").
 //
 // SDK 57 datetimepicker API:
 //   onValueChange(event, date) — fires on CONFIRM (OK). On Android
@@ -31,6 +34,7 @@ const Picker = DateTimePicker as React.ComponentType<any>;
 
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
+/** Default formatter: "12 / 04 / 1995". */
 const formatDDMMYYYY = (d: Date) => {
   if (!(d instanceof Date) || isNaN(d.getTime())) return '';
   return `${pad(d.getDate())} / ${pad(d.getMonth() + 1)} / ${d.getFullYear()}`;
@@ -53,6 +57,18 @@ interface DatePickerFieldProps {
   maximumDate?: Date;
   editable?: boolean;
   className?: string;
+  /**
+   * Optional override for how the selected date is displayed.
+   * Defaults to `formatDDMMYYYY` ("12 / 04 / 1995").
+   *
+   * Example for word format:
+   *   formatDisplay={(d) =>
+   *     d.toLocaleDateString('en-US', {
+   *       month: 'long', day: 'numeric', year: 'numeric',
+   *     })
+   *   }
+   */
+  formatDisplay?: (d: Date) => string;
 }
 
 export function DatePickerField({
@@ -65,6 +81,7 @@ export function DatePickerField({
   maximumDate,
   editable = true,
   className = '',
+  formatDisplay = formatDDMMYYYY,
 }: DatePickerFieldProps) {
   const [show, setShow] = useState(false);
   const [tempDate, setTempDate] = useState<Date | null>(null);
@@ -79,7 +96,6 @@ export function DatePickerField({
   // Signature is (event, date). We close the dialog here — `onDismiss`
   // will NOT fire when the user taps OK, only when they cancel.
   const handleAndroidValueChange = (event: any, date?: Date) => {
-    // Defensive: some versions pass (date) only; scan both args.
     const selected =
       date instanceof Date
         ? date
@@ -141,7 +157,7 @@ export function DatePickerField({
               hasValidValue ? 'text-ink' : 'text-text-light'
             }`}
           >
-            {hasValidValue && value ? formatDDMMYYYY(value) : placeholder}
+            {hasValidValue && value ? formatDisplay(value) : placeholder}
           </Text>
         </View>
       </TouchableOpacity>

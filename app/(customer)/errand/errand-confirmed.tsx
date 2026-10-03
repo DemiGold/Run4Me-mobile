@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -10,22 +10,39 @@ import { colors } from '@/constants/colors';
 // ─────────────────────────────────────────────────────────────
 // Errand Confirmed
 //
-// Post-payment confirmation. Shows the matched runner, pickup /
-// dropoff, and total charged. Tracking CTA routes to live-tracking.
+// Shown after a successful payment. Doesn't fetch anything —
+// every value it needs arrives via route params from whichever
+// payment screen just completed:
 //
-// Figma: errand-confirmed
-//   Green success circle · title · subtitle · summary card ·
-//   Track Errand CTA.
+//   - `amount`   (kobo string)  ← set by the payment screen
+//   - `runnerX`  (strings)      ← set by available-runners
+//   - `pickup` / `dropoff`      ← set by the wizard
+//   - `errandId`                ← set by finding-runner
 //
-// MOCK: values come from route params with sensible fallbacks.
+// Why we don't fetch: the customer is staring at a "success"
+// screen. A network round-trip here would delay the reward moment.
+// All the data we display is already in params — render immediately.
+//
+// Units reminder:
+//   `amount` arrives in KOBO (this is downstream of checkout's
+//   conversion boundary). `formatNaira` divides by 100 for display.
 // ─────────────────────────────────────────────────────────────
 
-const SERVICE_FEE = 1500;
-const DISTANCE_FEE = 800;
-const PLATFORM_FEE = 200;
+/**
+ * Display a kobo amount as naira: 2000000 → "₦20,000".
+ * Kobo is our internal unit downstream of checkout.
+ */
+const formatNaira = (kobo: number): string =>
+  '₦' + Math.round(kobo / 100).toLocaleString('en-US');
 
 export default function ErrandConfirmed() {
   const params = useLocalSearchParams<{
+    // Set by payment screens
+    amount?: string;
+    paymentMethod?: string;
+    paymentId?: string;
+    errandId?: string;
+    // Wizard chain
     type?: string;
     promo?: string;
     pickup?: string;
@@ -34,49 +51,57 @@ export default function ErrandConfirmed() {
     budget?: string;
     instructions?: string;
     timeline?: string;
-    paymentMethod?: string;
+    // Runner details
+    runnerId?: string;
     runnerName?: string;
     runnerRating?: string;
     runnerCompleted?: string;
     runnerVehicle?: string;
     runnerPickupMins?: string;
+    runnerPrice?: string;
   }>();
 
-  const runnerName = params.runnerName ?? 'David';
-  const runnerRating = params.runnerRating ?? '4.9';
-  const runnerPickupMins = params.runnerPickupMins ?? '7';
+  // ─── Total charged ───
+  // `amount` is kobo (from the payment screen). Fall back to 0 if
+  // somehow missing — the screen still renders, just shows ₦0.
+  const amountKobo = Number(params.amount ?? '0') || 0;
 
-  const budget = Number(params.budget ?? '15000') || 15000;
-  const promoDiscount = params.promo === 'FIRST4ME' ? 1000 : 0;
-  const totalCharged = `₦${(
-    budget +
-    SERVICE_FEE +
-    DISTANCE_FEE +
-    PLATFORM_FEE -
-    promoDiscount
-  ).toLocaleString('en-US')}`;
+  // ─── Runner details ───
+  const runnerName = params.runnerName ?? 'Your Runner';
+  const runnerRating = params.runnerRating ?? '5.0';
+  const runnerPickupMins = params.runnerPickupMins ?? '—';
 
-  const pickup = params.pickup ?? 'Shoprite Lekki';
-  const dropoff = params.dropoff ?? '12 Admiralty Way, Lekki';
+  // ─── Locations ───
+  const pickup = params.pickup ?? 'Pickup location';
+  const dropoff = params.dropoff ?? 'Delivery address';
 
+  // ─── Track Errand ───
+  // Everything from this screen carries forward so live-tracking
+  // can poll tracking data with the right errandId and still show
+  // the right runner/pickup/dropoff details.
   const handleTrack = () => {
     router.replace({
       pathname: '/(customer)/errand/live-tracking',
-      params,
+      params: {
+        ...params,
+        // Ensure live-tracking gets errandId under the key it reads.
+        id: params.errandId,
+        errandId: params.errandId,
+      },
     });
   };
 
   return (
     <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
       <View className="flex-1 px-6 pt-12">
-        {/* Success circle */}
+        {/* ─── Success circle ─── */}
         <View className="items-center mb-6">
           <View className="w-20 h-20 rounded-full bg-status-successLight items-center justify-center">
             <Feather name="check" size={36} color={colors.success} />
           </View>
         </View>
 
-        {/* Title + subtitle */}
+        {/* ─── Title + subtitle ─── */}
         <Text className="text-heading-sm font-gabarito text-ink text-center mb-2">
           Your Errand is Confirmed 🎉
         </Text>
@@ -84,7 +109,7 @@ export default function ErrandConfirmed() {
           Runner {runnerName} is on his way to handle your requests.
         </Text>
 
-        {/* Summary card */}
+        {/* ─── Summary card ─── */}
         <View className="border border-border rounded-2xl p-4 bg-surface mb-6">
           <Text className="text-micro font-figtree-bold text-ink uppercase tracking-wider mb-4">
             ERRAND SUMMARY
@@ -157,13 +182,13 @@ export default function ErrandConfirmed() {
               Total Amount Charged
             </Text>
             <Text className="text-body font-gabarito-bold text-primary">
-              {totalCharged}
+              {formatNaira(amountKobo)}
             </Text>
           </View>
         </View>
       </View>
 
-      {/* Bottom CTA */}
+      {/* ─── CTA ─── */}
       <View className="px-6 pb-6 pt-3">
         <Button variant="primary" fullWidth onPress={handleTrack}>
           Track Errand

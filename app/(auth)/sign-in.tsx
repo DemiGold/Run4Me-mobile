@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather, AntDesign } from '@expo/vector-icons';
 
+import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -18,19 +19,28 @@ import { colors } from '@/constants/colors';
 import { isValidEmail, isValidPhone } from '@/constants/validators';
 
 // ─────────────────────────────────────────────────────────────
-// Sign In
+// Sign In — wired to the auth API
 //
-// Figma: sign-in-screen
-//   Back + logo · heading · email/phone input ·
-//   Continue CTA · Google sign-in · Register link.
+// Two flows:
+//   1. Email/phone → asks the API to send an OTP → routes to OTP
+//      screen where verification completes and logs us in.
+//   2. Google → (mock) exchanges an idToken for our own session.
 //
-// MOCK: continue accepts any valid email/phone → routes to OTP.
-// Google button uses a mock sign-in for now (Console setup +
-// dev build required for real SDK).
+// IMPORTANT — pending user is NOT seeded here anymore.
+// Previously we called `setUser({ name: '', phone: undefined, ... })`
+// before routing to OTP. That "pending" user leaked into Settings
+// and other screens with null fields. Now:
+//
+//   - Sign-in: no user stored. Just identifier → OTP.
+//   - OTP verify: calls api.auth.verifyOtp → gets { user, token }
+//     → calls authStore.login(user, token). The REAL user lands in
+//     the store, fully populated.
+//
+// If the user backs out of OTP, they return to sign-in with an
+// empty store — which is the correct state for "not signed in".
 // ─────────────────────────────────────────────────────────────
 
-const isEmailOrPhone = (v: string) =>
-  isValidEmail(v) || isValidPhone(v);
+const isEmailOrPhone = (v: string) => isValidEmail(v) || isValidPhone(v);
 
 export default function SignInScreen() {
   const [identifier, setIdentifier] = useState('');
@@ -38,7 +48,9 @@ export default function SignInScreen() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const setUser = useAuthStore((state) => state.setUser);
+  // login() sets both user AND token in one state update.
+  // Used only for the Google path (email path goes through OTP).
+  const login = useAuthStore((state) => state.login);
 
   // ─── Email / phone sign-in ───
   const handleContinue = async () => {
@@ -56,24 +68,24 @@ export default function SignInScreen() {
     setError(null);
     setLoading(true);
     try {
-      // ─── MOCK: replace with real POST /auth/signin ───
-      await new Promise((r) => setTimeout(r, 800));
+      // Asks the backend to send an OTP to this identifier.
+      // The mock just resolves after ~600ms; a real backend would
+      // return { otpSent: true, channel: 'email' | 'sms' }.
+      await api.auth.signin(value);
 
-      // Seed the auth store so downstream screens have something.
-      // Real flow: OTP success will overwrite this with the real user.
-      setUser({
-        id: `pending-${Date.now()}`,
-        role: 'customer',
-        email: isValidEmail(value) ? value : '',
-        name: '',
-      });
-
+      // Hand off to the OTP screen. It reads `identifier` from
+      // params to know where to send the code, and its own verify
+      // flow will call api.auth.verifyOtp() and log us in.
       router.push({
         pathname: '/(auth)/otp',
         params: { identifier: value },
       });
-    } catch {
-      setError('Something went wrong. Please try again.');
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Something went wrong. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
@@ -84,25 +96,30 @@ export default function SignInScreen() {
   //   1. `npx expo install @react-native-google-signin/google-signin`
   //   2. Google Cloud Console OAuth clients (web + android + ios)
   //   3. Development build (Google SDK doesn't work in Expo Go)
-  // Swap the body of this function when the above is ready.
+  //
+  // When ready, replace the string with the real idToken:
+  //   const result = await GoogleSignin.signIn();
+  //   const idToken = result.data?.idToken;
+  //   const response = await api.auth.googleSignIn(idToken);
   const handleGoogle = async () => {
     setError(null);
     setGoogleLoading(true);
 
     try {
-      // ─── MOCK: simulate Google flow ───
-      await new Promise((r) => setTimeout(r, 900));
+      // api.auth.googleSignIn returns the same shape as verifyOtp:
+      // { token, refreshToken, user }. The mock returns a demo
+      // user so the flow is fully testable.
+      const response = await api.auth.googleSignIn('mock-google-id-token');
 
-      setUser({
-        id: `google-mock-${Date.now()}`,
-        role: 'customer',
-        email: 'demo.user@gmail.com',
-        name: 'Demo User',
-      });
-
+      // Persist the real user + token, then route home.
+      login(response.user, response.token);
       router.replace('/(customer)');
-    } catch {
-      setError('Google sign-in failed. Please try again.');
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Google sign-in failed. Please try again.'
+      );
     } finally {
       setGoogleLoading(false);
     }
@@ -118,7 +135,7 @@ export default function SignInScreen() {
       >
         <View className="flex-1 px-6">
 
-          {/* Top Row: Back + Logo */}
+          {/* ─── Top Row: Back + Logo ─── */}
           <View className="flex-row items-center justify-between pt-4 pb-8">
             <TouchableOpacity
               onPress={() => router.back()}
@@ -140,7 +157,7 @@ export default function SignInScreen() {
             <View className="w-8" />
           </View>
 
-          {/* Centered content */}
+          {/* ─── Centered content ─── */}
           <ScrollView
             className="flex-1"
             contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}

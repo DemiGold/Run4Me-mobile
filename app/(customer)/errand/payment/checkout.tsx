@@ -1,18 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
+import { api } from '@/services/api';
 import { Button } from '@/components/ui/Button';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
 // Checkout / Cost Estimate
 //
-// Figma: Cost Estimate
-//   Cost breakdown card + payment method radio list +
-//   sticky "Due Now" bar at the bottom.
+// This is the UNITS BOUNDARY of the payment flow.
+//
+//   Upstream (wizard, checkout inputs): NAIRA
+//     budget = "15000"    → ₦15,000
+//     service fees = 1500 → ₦1,500
+//
+//   Downstream (every payment screen + services/types): KOBO
+//     amount = "2000000"  → ₦20,000
+//     because Payment.amount is always kobo, matching the
+//     backend's convention (integer kobo, never floats).
+//
+// The conversion happens ONCE, right before router.replace:
+//     amount: String(dueNow * 100)
+//
+// Every downstream screen just does formatNaira(amount) —
+// no further conversion needed.
 //
 // Runs AFTER the customer picks a runner, so the runner's fee
 // folds into the final total here (not at the earlier wizard
@@ -26,9 +40,9 @@ import { colors } from '@/constants/colors';
 //   cash     → payment/cash
 // ─────────────────────────────────────────────────────────────
 
-const SERVICE_FEE = 1500;
-const DISTANCE_FEE = 800;
-const PLATFORM_FEE = 200;
+const SERVICE_FEE = 1500;   // naira
+const DISTANCE_FEE = 800;   // naira
+const PLATFORM_FEE = 200;   // naira
 
 type PaymentMethod = 'wallet' | 'card' | 'transfer' | 'cash';
 
@@ -39,32 +53,16 @@ type Method = {
   icon: React.ComponentProps<typeof Feather>['name'];
 };
 
-const PAYMENT_METHODS: Method[] = [
-  {
-    id: 'wallet',
-    label: 'Run4Me Wallet',
-    subtitle: 'Balance: ₦22,500',
-    icon: 'credit-card',
-  },
-  {
-    id: 'card',
-    label: 'GTBank Card **** 4910',
-    subtitle: '',
-    icon: 'credit-card',
-  },
-  {
-    id: 'transfer',
-    label: 'Bank Transfer',
-    subtitle: '',
-    icon: 'repeat',
-  },
-  {
-    id: 'cash',
-    label: 'Cash',
-    subtitle: '',
-    icon: 'x-circle',
-  },
-];
+/**
+ * Display a naira amount: 20000 → "₦20,000".
+ *
+ * NOTE: this checkout works internally in NAIRA, so this helper
+ * does NOT divide by 100. Downstream payment screens use a
+ * different `formatNaira` that expects kobo. Confusing but
+ * intentional — each screen is unit-consistent internally.
+ */
+const formatNaira = (naira: number): string =>
+  '₦' + naira.toLocaleString('en-US');
 
 export default function Checkout() {
   const params = useLocalSearchParams<{
@@ -89,21 +87,75 @@ export default function Checkout() {
     runnerVehicle?: string;
   }>();
 
+  // ─── Wizard values (all naira) ───
   const budget = Number(params.budget ?? '15000') || 15000;
   const promoDiscount = params.promo === 'FIRST4ME' ? 1000 : 0;
 
-  // Extract numeric runner fee from "₦2,500" → 2500
+  // Extract numeric runner fee from "₦2,500" → 2500 (naira)
   const runnerFee =
     Number((params.runnerPrice ?? '').replace(/\D/g, '')) || 0;
 
+  // ─── Totals (naira) ───
   const serviceTotal =
     SERVICE_FEE + DISTANCE_FEE + PLATFORM_FEE - promoDiscount;
   const dueNow = serviceTotal + runnerFee + budget;
 
+  // ─── Payment method selection ───
   const [selected, setSelected] = useState<PaymentMethod>('wallet');
 
-  const formatNaira = (amount: number) =>
-    `₦${amount.toLocaleString('en-US')}`;
+  // ─── Live wallet balance (for the wallet method subtitle) ───
+  // Fetched once on mount. If it fails we hide the subtitle
+  // rather than showing a placeholder — cleaner than "Balance: …"
+  const [walletBalanceKobo, setWalletBalanceKobo] = useState<number | null>(
+    null
+  );
+
+  const fetchBalance = useCallback(async () => {
+    try {
+      const res = await api.wallet.getBalance();
+      setWalletBalanceKobo(res.balance); // kobo
+    } catch {
+      setWalletBalanceKobo(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBalance();
+  }, [fetchBalance]);
+
+  // Subtitle for the wallet row uses the real balance when we have
+  // it, falls back to nothing when we don't.
+  const walletSubtitle =
+    walletBalanceKobo !== null
+      ? `Balance: ₦${Math.round(walletBalanceKobo / 100).toLocaleString('en-US')}`
+      : '';
+
+  const paymentMethods: Method[] = [
+    {
+      id: 'wallet',
+      label: 'Run4Me Wallet',
+      subtitle: walletSubtitle,
+      icon: 'credit-card',
+    },
+    {
+      id: 'card',
+      label: 'GTBank Card **** 4910',
+      subtitle: '',
+      icon: 'credit-card',
+    },
+    {
+      id: 'transfer',
+      label: 'Bank Transfer',
+      subtitle: '',
+      icon: 'repeat',
+    },
+    {
+      id: 'cash',
+      label: 'Cash',
+      subtitle: '',
+      icon: 'x-circle',
+    },
+  ];
 
   // ─── Branch to the correct payment screen ───
   const handleConfirm = () => {
@@ -114,11 +166,16 @@ export default function Checkout() {
       cash: '/(customer)/errand/payment/cash',
     };
 
+    // ═══ UNITS BOUNDARY ═══
+    // Convert naira → kobo ONCE here. Every downstream payment
+    // screen expects kobo. Never send naira past this line.
+    const dueNowKobo = dueNow * 100;
+
     router.replace({
       pathname: routeMap[selected] as any,
       params: {
         ...params,
-        amount: String(dueNow),
+        amount: String(dueNowKobo), // kobo
         paymentMethod: selected,
       },
     });
@@ -216,7 +273,7 @@ export default function Checkout() {
           </Text>
 
           <View className="gap-3 mb-6">
-            {PAYMENT_METHODS.map((method) => {
+            {paymentMethods.map((method) => {
               const isSelected = selected === method.id;
               return (
                 <TouchableOpacity
@@ -225,9 +282,10 @@ export default function Checkout() {
                   activeOpacity={0.8}
                   className={`
                     rounded-2xl p-4 flex-row items-center gap-3 bg-surface
-                    ${isSelected
-                      ? 'border-2 border-primary'
-                      : 'border border-border'
+                    ${
+                      isSelected
+                        ? 'border-2 border-primary'
+                        : 'border border-border'
                     }
                   `}
                 >

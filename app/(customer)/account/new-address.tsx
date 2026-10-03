@@ -1,57 +1,125 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
+import { api } from '@/services/api';
+import type { SavedAddress } from '@/services/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { TextArea } from '@/components/ui/TextArea';
 import { Toggle } from '@/components/ui/Toggle';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
-// New Address
+// New Address — wired to the locations API
 //
-// Add a saved address. Label is a quick-pick (Home/Work/etc)
-// with a custom option. Address is a single field for now —
-// real implementation will use a map picker.
+// Saves a new address via api.locations.createLocation. On
+// success, navigates back to the previous screen.
 //
-// MOCK: save just routes back. Replace with POST /locations.
+// Data flow:
+//   1. Customer picks a label (Home / Work / Mom's House /
+//      Other + custom text).
+//   2. Enters the full address text.
+//   3. Optionally sets it as default.
+//   4. Save → api.locations.createLocation({ label, address,
+//      icon, isDefault, coordinate? })
+//   5. On success → router.back()
+//   6. On failure → inline error banner (was Alert)
+//
+// Label → icon mapping:
+//   Figma's saved-addresses screen renders a Feather icon per
+//   card. The backend stores the icon id. We derive it from the
+//   label here so the customer doesn't have to pick one:
+//     Home / Work / Mom's House → home | briefcase | map-pin
+//     Other (custom label)      → map-pin (generic)
+//
+// Coordinate:
+//   The map picker isn't built yet, so no lat/lng is captured.
+//   `coordinate` is optional in the type — the address still
+//   saves without it. When the map picker ships, grab the coords
+//   from there and pass them in.
+//
+// ⚠️ Refresh note for the previous screen
+//   `router.back()` doesn't remount `saved-addresses.tsx`, so
+//   that screen won't see the new item until it re-fetches.
+//   Fix: switch `saved-addresses.tsx` to use `useFocusEffect`
+//   instead of `useEffect`. Flagged for a follow-up pass.
 // ─────────────────────────────────────────────────────────────
 
 type LabelOption = 'Home' | 'Work' | "Mom's House" | 'Other';
 
 const LABELS: LabelOption[] = ['Home', 'Work', "Mom's House", 'Other'];
 
+/**
+ * Map a label to the Feather icon the saved-addresses card will
+ * render. Matches the icon type from SavedAddress.
+ */
+const labelToIcon = (label: string): SavedAddress['icon'] => {
+  switch (label) {
+    case 'Home':        return 'home';
+    case 'Work':        return 'briefcase';
+    case "Mom's House": return 'map-pin';
+    default:            return 'map-pin';
+  }
+};
+
 export default function NewAddress() {
+  // ─── Form state ───
   const [label, setLabel] = useState<LabelOption>('Home');
   const [customLabel, setCustomLabel] = useState('');
   const [address, setAddress] = useState('');
   const [isDefault, setIsDefault] = useState(false);
+
+  // ─── Submission state ───
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // ─── Derived values ───
   const finalLabel = label === 'Other' ? customLabel.trim() : label;
-  const canSave = finalLabel.length > 0 && address.trim().length >= 10;
 
+  // Client-side gate on the Save button.
+  //   - Label non-empty
+  //   - Address at least 10 chars — filters out "lagos" or "1" or
+  //     other junk before we bother the API
+  const canSave = useMemo(
+    () => finalLabel.length > 0 && address.trim().length >= 10,
+    [finalLabel, address]
+  );
+
+  // ─── Save ───
   const handleSave = async () => {
-    if (!canSave) return;
+    if (!canSave || saving) return;
+
     setSaving(true);
+    setError(null);
+
     try {
-      // ─── MOCK: replace with POST /locations ───
-      await new Promise((r) => setTimeout(r, 700));
+      await api.locations.createLocation({
+        label: finalLabel,
+        address: address.trim(),
+        icon: labelToIcon(label),
+        isDefault,
+        // coordinate: undefined — no map picker yet
+      });
+
+      // Navigate back. The previous screen will need a focus
+      // effect to see the new item — see header comment.
       router.back();
-    } catch {
-      Alert.alert('Error', 'Could not save address. Please try again.');
-    } finally {
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Could not save address. Please try again.'
+      );
       setSaving(false);
     }
   };
@@ -82,7 +150,22 @@ export default function NewAddress() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Label picker */}
+          {/* ─── Submit error banner ─── */}
+          {error ? (
+            <View className="bg-status-errorLight rounded-2xl px-4 py-3.5 flex-row items-start gap-2.5 mb-5">
+              <Feather
+                name="alert-triangle"
+                size={16}
+                color={colors.danger}
+                style={{ marginTop: 2 }}
+              />
+              <Text className="flex-1 text-body-xs font-figtree text-status-error">
+                {error}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* ─── Label picker ─── */}
           <Text className="text-body-sm font-figtree text-muted mb-3">
             Label
           </Text>
@@ -92,13 +175,18 @@ export default function NewAddress() {
               return (
                 <TouchableOpacity
                   key={opt}
-                  onPress={() => setLabel(opt)}
+                  onPress={() => {
+                    setLabel(opt);
+                    if (error) setError(null);
+                  }}
                   activeOpacity={0.75}
+                  disabled={saving}
                   className={`
                     rounded-full px-4 py-2.5 border
-                    ${isSelected
-                      ? 'bg-primary border-primary'
-                      : 'bg-surface border-border'
+                    ${
+                      isSelected
+                        ? 'bg-primary border-primary'
+                        : 'bg-surface border-border'
                     }
                   `}
                 >
@@ -115,12 +203,16 @@ export default function NewAddress() {
             })}
           </View>
 
+          {/* ─── Custom label — only when "Other" is selected ─── */}
           {label === 'Other' ? (
             <View className="mb-5">
               <Input
                 label="Custom Label"
                 value={customLabel}
-                onChangeText={setCustomLabel}
+                onChangeText={(v) => {
+                  setCustomLabel(v);
+                  if (error) setError(null);
+                }}
                 placeholder="e.g. Gym, Church"
                 autoCapitalize="words"
                 editable={!saving}
@@ -128,29 +220,21 @@ export default function NewAddress() {
             </View>
           ) : null}
 
-          {/* Address */}
-          <View className="mb-5">
-            <Text className="text-body-sm font-figtree text-muted mb-2">
-              Full Address
-            </Text>
-            <View
-              className="border border-border rounded-field bg-surface px-4 py-3.5"
-              style={{ minHeight: 100 }}
-            >
-              <TextInput
-                className="flex-1 text-body font-figtree text-ink"
-                style={{ textAlignVertical: 'top' }}
-                value={address}
-                onChangeText={setAddress}
-                placeholder="House number, street, area, city"
-                placeholderTextColor={colors.subtle}
-                multiline
-                editable={!saving}
-              />
-            </View>
-          </View>
+          {/* ─── Address — extracted TextArea primitive ─── */}
+          <TextArea
+            label="Full Address"
+            value={address}
+            onChangeText={(v) => {
+              setAddress(v);
+              if (error) setError(null);
+            }}
+            placeholder="House number, street, area, city"
+            height={100}
+            editable={!saving}
+            className="mb-5"
+          />
 
-          {/* Map preview placeholder */}
+          {/* ─── Map preview placeholder ─── */}
           <TouchableOpacity
             activeOpacity={0.75}
             className="w-full h-32 rounded-2xl bg-background-dark border border-border items-center justify-center mb-5"
@@ -161,12 +245,19 @@ export default function NewAddress() {
             </Text>
           </TouchableOpacity>
 
-          {/* Set as default */}
+          {/* ─── Set as default ─── */}
           <View className="flex-row items-center justify-between py-4 border-t border-border">
             <Text className="text-body-sm font-figtree text-ink">
               Set as default address
             </Text>
-            <Toggle value={isDefault} onChange={setIsDefault} />
+            <Toggle
+              value={isDefault}
+              onChange={(v) => {
+                setIsDefault(v);
+                if (error) setError(null);
+              }}
+              disabled={saving}
+            />
           </View>
         </ScrollView>
 

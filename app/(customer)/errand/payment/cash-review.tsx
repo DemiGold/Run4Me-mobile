@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,60 +8,165 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 
+import { api } from '@/services/api';
+import type { Payment } from '@/services/types';
 import { Button } from '@/components/ui/Button';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
-// Cash Review (customer-side mirror)
+// Cash Review — wired to the payments API
 //
-// Figma: Cash received / Confirm the cash amount
-//   Green success badge · ₦ amount in Figma teal ·
-//   Primary "Yes, I agree" · Destructive "Dispute amount"
+// Customer sees the amount the runner has claimed and either
+// agrees (confirming the payment) or disputes it (opening the
+// cash-dispute flow).
 //
-// Runner version (in (runner)/) uses the same layout with
-// different copy: "Chioma says she handed you:".
+// Units:
+//   `amount` arrives from cash.tsx ALREADY in KOBO. formatNaira
+//   divides by 100 for display. Do not multiply here.
 //
-// MOCK: submit → errand confirmed → rate runner.
+// Flow:
+//   1. Read `amount`, `paymentId`, `errandId`, `runnerName` from
+//      params (set by cash.tsx).
+//   2. On mount, fetch the payment to see if the runner has
+//      already reviewed it. This catches the edge case where the
+//      customer reopens the screen after agreeing.
+//      - status 'confirmed'  → render as confirmed, CTA becomes
+//                              "Continue" instead of "Yes, I agree"
+//      - status 'processing' → normal agree/dispute UI
+//      - status 'failed'     → show error state
+//   3. Agree → api.payments.confirmCashAmount(paymentId, amountKobo)
+//              then route to errand-confirmed
+//   4. Dispute → route to cash-dispute (which handles the reason
+//                + correction flow)
+//
+// Why fetch the payment: without it, we'd have no way to know
+// whether the runner has already responded on their side. The
+// fetch makes this screen idempotent — safe to reopen.
 // ─────────────────────────────────────────────────────────────
 
-const formatNaira = (n: number) =>
-  '₦' + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** Display a kobo amount as naira: 2000000 → "₦20,000". */
+const formatNaira = (kobo: number): string =>
+  '₦' + Math.round(kobo / 100).toLocaleString('en-US');
 
 export default function CashReview() {
   const params = useLocalSearchParams<{
-    amount?: string;
+    amount?: string;         // KOBO from cash.tsx
     errandId?: string;
+    paymentId?: string;
     runnerName?: string;
+    // Wizard pass-through
+    type?: string;
+    promo?: string;
+    pickup?: string;
+    dropoff?: string;
+    items?: string;
+    budget?: string;
+    instructions?: string;
+    timeline?: string;
+    scheduledDate?: string;
+    scheduledTime?: string;
+    runnerId?: string;
+    runnerRating?: string;
+    runnerPrice?: string;
+    runnerPickupMins?: string;
+    runnerCompleted?: string;
+    runnerVehicle?: string;
+    paymentMethod?: string;
   }>();
 
-  const amount = params.amount ? parseInt(params.amount, 10) : 17500;
+  // amount in kobo — straight from cash.tsx, no conversion.
+  const amountKobo = params.amount ? parseInt(params.amount, 10) : 0;
   const errandId = params.errandId ?? '';
-  const runnerName = params.runnerName ?? 'Runner Tunde';
+  const paymentId = params.paymentId ?? '';
+  const runnerName = params.runnerName ?? 'Your Runner';
 
-  const [loading, setLoading] = useState(false);
+  // ─── Data state ───
+  // `payment` reflects the backend's view. On mount we fetch it
+  // to see if the runner has already responded.
+  const [payment, setPayment] = useState<Payment | null>(null);
+  const [loadingPayment, setLoadingPayment] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleAgree = async () => {
-    setLoading(true);
+  // ─── Action state ───
+  const [submitting, setSubmitting] = useState(false);
+
+  // ─── Fetch the payment on mount ───
+  const fetchPayment = useCallback(async () => {
+    if (!paymentId) return;
+    setLoadingPayment(true);
     try {
-      // ─── MOCK: replace with real API call ───
-      await new Promise((r) => setTimeout(r, 700));
+      const p = await api.payments.getPayment(paymentId);
+      setPayment(p);
+    } catch {
+      // Non-fatal — we still render the UI using params. The
+      // agree action will fail loudly if the payment is bad.
+    } finally {
+      setLoadingPayment(false);
+    }
+  }, [paymentId]);
 
+  useEffect(() => {
+    fetchPayment();
+  }, [fetchPayment]);
+
+  // Already confirmed? Change the CTA copy so reopening this
+  // screen doesn't confuse the customer.
+  const alreadyConfirmed = payment?.status === 'confirmed';
+
+  // ─── Agree ───
+  const handleAgree = async () => {
+    if (!paymentId || !errandId) {
+      setError('Missing payment or errand reference. Please go back.');
+      return;
+    }
+    if (submitting) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      // Server confirms the amount the customer and runner agreed
+      // on. Returns the now-confirmed Payment.
+      await api.payments.confirmCashAmount(paymentId, amountKobo);
+
+      // Route to errand-confirmed with the full param chain.
       router.replace({
         pathname: '/(customer)/errand/errand-confirmed',
-        params: { errandId, amount: String(amount) },
+        params: {
+          ...params,
+          amount: String(amountKobo),
+          paymentMethod: 'cash',
+          paymentId,
+        },
       });
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Could not confirm. Please try again.'
+      );
+      setSubmitting(false);
     }
   };
 
+  // ─── Dispute ───
   const handleDispute = () => {
-    // ─── MOCK: route to a support/chat flow ───
+    if (submitting) return;
     router.push({
       pathname: '/(customer)/errand/payment/cash-dispute',
-      params: { errandId, amount: String(amount) },
+      params: {
+        ...params,
+        amount: String(amountKobo),   // kobo
+        originalAmount: String(amountKobo),
+        paymentId,
+        runnerName,
+      },
     });
   };
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════
 
   return (
     <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
@@ -102,10 +207,37 @@ export default function CashReview() {
         </Text>
 
         {/* Big amount */}
-        <Text className="text-heading-lg font-gabarito text-primary mt-3 mb-10">
-          {formatNaira(amount)}
+        <Text className="text-heading-lg font-gabarito text-primary mt-3 mb-6">
+          {formatNaira(amountKobo)}
         </Text>
 
+        {/* Error banner */}
+        {error ? (
+          <View className="bg-status-errorLight rounded-2xl px-4 py-3.5 flex-row items-start gap-2.5 mb-4">
+            <Feather
+              name="alert-triangle"
+              size={16}
+              color={colors.danger}
+              style={{ marginTop: 2 }}
+            />
+            <Text className="flex-1 text-body-xs font-figtree text-status-error">
+              {error}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Info banner — shows what "dispute" actually does */}
+        <View className="bg-primary-light rounded-2xl px-4 py-3.5 flex-row items-start gap-2.5">
+          <Feather
+            name="info"
+            size={16}
+            color={colors.primary}
+            style={{ marginTop: 2 }}
+          />
+          <Text className="flex-1 text-caption font-figtree text-muted">
+            If the amount is wrong, tap <Text className="font-figtree-bold">Dispute</Text> and enter the correct cash you handed over. Support will review.
+          </Text>
+        </View>
       </View>
 
       {/* Actions */}
@@ -113,16 +245,17 @@ export default function CashReview() {
         <Button
           variant="primary"
           fullWidth
-          loading={loading}
+          loading={submitting}
+          disabled={loadingPayment}
           onPress={handleAgree}
         >
-          Yes, I agree
+          {alreadyConfirmed ? 'Continue' : 'Yes, I agree'}
         </Button>
 
         <Button
           variant="destructive"
           fullWidth
-          disabled={loading}
+          disabled={submitting || alreadyConfirmed}
           onPress={handleDispute}
         >
           Dispute amount

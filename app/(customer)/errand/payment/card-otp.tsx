@@ -11,38 +11,74 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 
+import { api } from '@/services/api';
 import { Button } from '@/components/ui/Button';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
-// Card OTP confirmation
+// Card OTP confirmation — wired to the payments API
 //
 // Vertical 6-digit OTP entered after the customer submits card
-// details. Confirms the card payment and advances to the
-// errand payment confirmation.
+// details. Verifying here is what actually charges the card.
 //
-// Figma: Card OTP confirmation
-//   393 × 712 content, vertical OTP layout (unlike the auth OTP
-//   which is horizontal — kept separate on purpose).
+// Units:
+//   `amount` arrives from card.tsx ALREADY in KOBO. Do not
+//   multiply. formatNaira (if we displayed it) divides by 100.
 //
-// MOCK: correct code is '123456'. Replace with a real
-// /payment/:id/otp call when the backend ships it.
+// Flow:
+//   1. Read `amount`, `paymentId`, `cardLast4`, `errandId` from
+//      params — all set by card.tsx.
+//   2. On 6th digit, auto-submit via api.payments.verifyCardOtp(
+//      paymentId, code).
+//   3. On success, `payment.status` becomes 'confirmed'. We
+//      route to errand-confirmed with the full param chain.
+//   4. On wrong OTP, we clear the input and refocus the first
+//      box — the ApiError message tells us it was the code.
+//
+// Resend:
+//   There's no dedicated resend endpoint for card OTP. In real
+//   life the bank's SMS arrives independently — the customer
+//   just waits. We keep the countdown UX but the resend button
+//   is a visual reset only; no network call. When the backend
+//   ships a resend endpoint, swap handleResend's body.
 // ─────────────────────────────────────────────────────────────
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 60;
-const MOCK_CORRECT_CODE = '123456';
 
 export default function CardOtp() {
   const params = useLocalSearchParams<{
     amount?: string;
     cardLast4?: string;
     errandId?: string;
+    paymentId?: string;
+    // Wizard pass-through
+    type?: string;
+    promo?: string;
+    pickup?: string;
+    dropoff?: string;
+    items?: string;
+    budget?: string;
+    instructions?: string;
+    timeline?: string;
+    scheduledDate?: string;
+    scheduledTime?: string;
+    runnerId?: string;
+    runnerName?: string;
+    runnerRating?: string;
+    runnerPrice?: string;
+    runnerPickupMins?: string;
+    runnerCompleted?: string;
+    runnerVehicle?: string;
+    paymentMethod?: string;
   }>();
 
-  const amount = params.amount ?? '17500';
-  const cardLast4 = params.cardLast4 ?? '4910';
+  // amount is kobo, set by card.tsx. Keep it as a string for
+  // pass-through — no need to parse unless we display it.
+  const amount = params.amount ?? '0';
+  const cardLast4 = params.cardLast4 ?? '••••';
   const errandId = params.errandId ?? '';
+  const paymentId = params.paymentId ?? '';
 
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
@@ -66,36 +102,48 @@ export default function CardOtp() {
   const handleVerify = useCallback(
     async (code?: string) => {
       const value = code ?? otpString;
+
       if (value.length !== OTP_LENGTH) {
         setError('Enter the 6-digit code to continue.');
+        return;
+      }
+      if (!paymentId) {
+        setError('Missing payment reference. Please go back and try again.');
         return;
       }
 
       setLoading(true);
       setError(null);
       try {
-        // ─── MOCK: replace with real API call ───
-        await new Promise((r) => setTimeout(r, 800));
+        // Server verifies the OTP with the card issuer and, on
+        // success, charges the card. Returns the now-confirmed
+        // Payment object.
+        await api.payments.verifyCardOtp(paymentId, value);
 
-        if (value !== MOCK_CORRECT_CODE) {
-          setError('The code you entered is incorrect. Please try again.');
-          setOtp(Array(OTP_LENGTH).fill(''));
-          inputRefs.current[0]?.focus();
-          setLoading(false);
-          return;
-        }
-
-        // ─── Success → bank-payment-confirmation (or next step) ───
+        // Success — route to errand-confirmed with the full param
+        // chain so downstream screens have everything.
         router.replace({
           pathname: '/(customer)/errand/errand-confirmed',
-          params: { amount, errandId },
+          params: {
+            ...params,
+            amount,
+            paymentMethod: 'card',
+            paymentId,
+          },
         });
-      } catch {
-        setError('Something went wrong. Please try again.');
+      } catch (e) {
+        const message =
+          e instanceof Error
+            ? e.message
+            : 'The code you entered is incorrect. Please try again.';
+
+        setError(message);
+        setOtp(Array(OTP_LENGTH).fill(''));
+        inputRefs.current[0]?.focus();
         setLoading(false);
       }
     },
-    [otpString, amount, errandId]
+    [otpString, paymentId, amount, params]
   );
 
   // ─── Auto-submit on completion ───
@@ -142,13 +190,16 @@ export default function CardOtp() {
     }
   };
 
+  // ─── Resend (visual reset) ───
+  // No network call for now — card OTPs come straight from the
+  // bank and we have no endpoint to trigger them. When Samuel
+  // ships one, replace this body with the API call.
   const handleResend = () => {
     if (resendIn > 0) return;
     setOtp(Array(OTP_LENGTH).fill(''));
     setError(null);
     setResendIn(RESEND_SECONDS);
     inputRefs.current[0]?.focus();
-    // ─── MOCK: real resend API call ───
   };
 
   const mm = String(Math.floor(resendIn / 60)).padStart(2, '0');
@@ -177,11 +228,15 @@ export default function CardOtp() {
           <View className="w-9" />
         </View>
 
-        {/* Content — top-aligned, scrollable */}
+        {/* Content */}
         <View className="flex-1 px-6">
           {/* Icon badge */}
           <View className="w-16 h-16 rounded-full bg-primary-light items-center justify-center mb-6 mt-4">
-            <Ionicons name="shield-checkmark" size={28} color={colors.primary} />
+            <Ionicons
+              name="shield-checkmark"
+              size={28}
+              color={colors.primary}
+            />
           </View>
 
           {/* Heading */}
@@ -205,11 +260,12 @@ export default function CardOtp() {
                   w-full h-14 rounded-field px-4
                   text-center text-title font-gabarito text-ink
                   border
-                  ${error
-                    ? 'border-status-error bg-status-errorLight'
-                    : focusedIndex === index
-                    ? 'border-primary bg-surface'
-                    : 'border-border bg-surface'
+                  ${
+                    error
+                      ? 'border-status-error bg-status-errorLight'
+                      : focusedIndex === index
+                      ? 'border-primary bg-surface'
+                      : 'border-border bg-surface'
                   }
                 `}
                 keyboardType="number-pad"

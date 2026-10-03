@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,43 +7,57 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 
+import { api } from '@/services/api';
 import { Button } from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
-// Wallet Payment
+// Wallet Payment — wired to the payments API
 //
-// Figma: Wallet payment
-//   Total to Pay card · escrow info banner · transaction PIN ·
-//   confirm CTA.
+// Runs after checkout when the customer chose the wallet method.
 //
-// Funds are held in escrow until the errand completes. If the
-// customer cancels, the amount refunds to their wallet.
+// Data flow:
+//   1. Read `amount` (naira string) and `errandId` from params.
+//   2. Fetch real wallet balance via api.wallet.getBalance().
+//      The API returns kobo, so we hold balance in kobo.
+//   3. Customer enters a 4-digit PIN.
+//   4. On confirm:
+//        api.payments.payWithWallet(errandId, amountKobo, pin)
+//      which either:
+//        - returns { payment, newBalance }  → route to confirmed
+//        - throws ApiError('PIN_INVALID')   → show "Incorrect PIN"
+//        - throws ApiError('INSUFFICIENT_FUNDS') → show balance warning
 //
-// On success: routes to errand-confirmed with ALL wizard params
-// forwarded so the confirmation + tracking screens have the
-// runner, pickup/dropoff, and item data available.
+// Units — this is important:
+//   - `params.amount` is in NAIRA (that's what checkout sends).
+//   - Everything in services/types + services/mocks is in KOBO.
+//   - We convert ONCE at the top: `amountKobo = amountNaira * 100`.
+//   - All subsequent math and API calls use kobo.
+//   - `formatNaira(kobo)` divides by 100 for display.
 //
-// MOCK: correct PIN is '1234'. Replace with a real
-// POST /payments/wallet call when backend ships.
+// This screen is where the conversion happens. It's a known
+// inconsistency in the wizard; ideally checkout would send kobo,
+// but for now the wallet screen absorbs the fix so it's correct
+// regardless of what upstream sends.
 // ─────────────────────────────────────────────────────────────
 
-const formatNaira = (n: number) =>
-  '₦' + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-const MOCK_WALLET_BALANCE = 22500;
-const MOCK_CORRECT_PIN = '1234';
+/** Convert a kobo amount (integer) to a display string: 2000000 → "₦20,000". */
+const formatNaira = (kobo: number): string =>
+  '₦' + Math.round(kobo / 100).toLocaleString('en-US');
 
 export default function WalletPayment() {
+  // ─── Route params — full wizard chain ───
   const params = useLocalSearchParams<{
-    amount?: string;
+    amount?: string;          // naira string from checkout
     errandId?: string;
-    // Everything else from the wizard chain
+    // Wizard pass-through
     type?: string;
     promo?: string;
     pickup?: string;
@@ -64,48 +78,120 @@ export default function WalletPayment() {
     paymentMethod?: string;
   }>();
 
-  const amount = params.amount ? parseInt(params.amount, 10) : 17500;
+  // ─── Units conversion — do this ONCE ───
+  // params.amount is naira ("20000"). Everything downstream uses
+  // kobo. Convert here so the rest of the file is unit-consistent.
+  const amountNaira = params.amount ? parseInt(params.amount, 10) : 20_000;
+  const amountKobo = amountNaira * 100;
+
   const errandId = params.errandId ?? '';
 
+  // ─── State ───
+  // Balance comes from the API and is in kobo. `null` while loading.
+  const [balance, setBalance] = useState<number | null>(null);
+
+  // Loading state for the balance fetch (shows skeleton).
+  const [loadingBalance, setLoadingBalance] = useState(true);
+
+  // Pull-to-refresh for a stale balance.
+  const [refreshing, setRefreshing] = useState(false);
+
+  // PIN + submission
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const sufficient = MOCK_WALLET_BALANCE >= amount;
+  // ─── Fetch balance ───
+  const fetchBalance = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoadingBalance(true);
 
+    try {
+      const res = await api.wallet.getBalance();
+      setBalance(res.balance); // kobo
+    } catch {
+      // Silent — a failed balance fetch falls back to unknown.
+      // `sufficient` below treats null as "assume OK, let the API
+      // reject if funds are actually short."
+      setBalance(null);
+    } finally {
+      setLoadingBalance(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBalance();
+  }, [fetchBalance]);
+
+  // ─── Balance sufficiency ───
+  // If we don't know the balance yet, we optimistically assume
+  // it's enough — the API will reject with INSUFFICIENT_FUNDS if
+  // not, and we show that error. Better UX than blocking up front.
+  const sufficient = balance === null || balance >= amountKobo;
+
+  // ─── Confirm payment ───
   const handleConfirm = async () => {
     if (pin.length !== 4) {
       setError('Enter your 4-digit transaction PIN.');
       return;
     }
+    if (!errandId) {
+      setError('Missing errand reference. Please go back and try again.');
+      return;
+    }
 
-    setLoading(true);
+    setSubmitting(true);
     setError(null);
 
     try {
-      // ─── MOCK: replace with real wallet payment API ───
-      await new Promise((r) => setTimeout(r, 900));
+      // Calls POST /payments/wallet (or mock).
+      // Server checks PIN + balance + errand status atomically.
+      // Returns the created Payment and the new balance.
+      const result = await api.payments.payWithWallet(
+        errandId,
+        amountKobo,
+        pin
+      );
 
-      if (pin !== MOCK_CORRECT_PIN) {
-        setError('Incorrect PIN. Please try again.');
-        setPin('');
-        setLoading(false);
-        return;
-      }
+      // Update local balance display — user might catch a glimpse
+      // of it before navigation.
+      setBalance(result.newBalance);
 
+      // Route forward with the full param chain. The downstream
+      // screens (errand-confirmed, live-tracking, chat, etc.) all
+      // need this data.
       router.replace({
         pathname: '/(customer)/errand/errand-confirmed',
         params: {
           ...params,
-          amount: String(amount),
+          amount: String(amountNaira), // keep the wizard's naira convention
           paymentMethod: 'wallet',
+          paymentId: result.payment.id,
         },
       });
-    } catch {
-      setError('Something went wrong. Please try again.');
-      setLoading(false);
+    } catch (e) {
+      // ApiError carries a human-readable message. Common cases:
+      //   - "Incorrect PIN. Please try again."
+      //   - "Wallet balance is too low."
+      const message =
+        e instanceof Error
+          ? e.message
+          : 'Payment failed. Please try again.';
+      setError(message);
+
+      // Wrong PIN — clear input so the user can retype
+      if (message.toLowerCase().includes('pin')) {
+        setPin('');
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════
 
   return (
     <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
@@ -135,23 +221,37 @@ export default function WalletPayment() {
           contentContainerStyle={{ paddingBottom: 24 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchBalance(true)}
+              tintColor={colors.primary}
+            />
+          }
         >
           <View className="px-6 gap-5">
 
-            {/* Total to Pay */}
+            {/* ─── Total to Pay ─── */}
             <View className="border border-border rounded-2xl p-4 gap-1.5">
               <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider">
                 TOTAL TO PAY
               </Text>
               <Text className="text-heading-sm font-gabarito text-primary">
-                {formatNaira(amount)}
+                {formatNaira(amountKobo)}
               </Text>
-              <Text className="text-caption font-figtree text-muted">
-                Wallet balance: {formatNaira(MOCK_WALLET_BALANCE)}
-              </Text>
+
+              {/* Balance line — skeleton while loading */}
+              {loadingBalance ? (
+                <Skeleton width={180} height={12} />
+              ) : (
+                <Text className="text-caption font-figtree text-muted">
+                  Wallet balance:{' '}
+                  {balance === null ? '—' : formatNaira(balance)}
+                </Text>
+              )}
             </View>
 
-            {/* Escrow info banner */}
+            {/* ─── Escrow info banner ─── */}
             <View className="bg-primary-light rounded-2xl px-4 py-3.5 flex-row items-start gap-2.5">
               <View className="mt-0.5">
                 <Ionicons
@@ -161,12 +261,12 @@ export default function WalletPayment() {
                 />
               </View>
               <Text className="flex-1 text-body-xs font-figtree text-ink leading-5">
-                {formatNaira(amount)} will be held securely until your errand
-                is completed.
+                {formatNaira(amountKobo)} will be held securely until your
+                errand is completed.
               </Text>
             </View>
 
-            {/* Insufficient balance warning */}
+            {/* ─── Insufficient balance warning ─── */}
             {!sufficient ? (
               <View className="bg-status-errorLight rounded-2xl px-4 py-3.5 flex-row items-start gap-2.5">
                 <Feather
@@ -182,7 +282,7 @@ export default function WalletPayment() {
               </View>
             ) : null}
 
-            {/* Transaction PIN */}
+            {/* ─── Transaction PIN ─── */}
             <View>
               <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider mb-2">
                 TRANSACTION PIN
@@ -205,7 +305,7 @@ export default function WalletPayment() {
                   keyboardType="number-pad"
                   secureTextEntry
                   maxLength={4}
-                  editable={!loading && sufficient}
+                  editable={!submitting && sufficient}
                 />
               </View>
               {error ? (
@@ -215,7 +315,7 @@ export default function WalletPayment() {
               ) : null}
             </View>
 
-            {/* Forgot PIN */}
+            {/* ─── Forgot PIN ─── */}
             <TouchableOpacity
               className="self-end"
               hitSlop={8}
@@ -229,12 +329,12 @@ export default function WalletPayment() {
           </View>
         </ScrollView>
 
-        {/* CTA */}
+        {/* ─── CTA ─── */}
         <View className="px-6 pb-6 pt-3 bg-surface">
           <Button
             variant="primary"
             fullWidth
-            loading={loading}
+            loading={submitting}
             disabled={!sufficient || pin.length !== 4}
             onPress={handleConfirm}
           >

@@ -13,18 +13,53 @@ import { colors } from '@/constants/colors';
 // Figma: budget screen
 //   Giant ₦ input (36px Gabarito) · info box · primary CTA.
 //
-// Budget state stores DIGITS ONLY ("15000"). The display value is
-// derived on every render via toLocaleString. This avoids the
-// classic "backspace inflates the number" bug that comes from
-// formatting the stored value with decimals on every keystroke.
-//
 // IMPORTANT: all wizard params accumulate forward. `items` is
 // forwarded from items.tsx; forgetting it here silently drops it
 // before checkout.
+//
+// Units: NAIRA (integer). This screen is upstream of checkout,
+// which is the naira→kobo boundary for the rest of the flow.
+//
+// ─── How the ".00" suffix works ───
+// The number displayed is: "₦" + formatted digits + ".00"
+//
+//   State stores:   "15000"  (digits only)
+//   Display shows:  "15,000" (in the TextInput, right-aligned)
+//   Suffix shows:   ".00"    (a sibling Text, not editable)
+//
+// The `.00` is NOT part of the TextInput — it's a separate Text
+// next to it. If we put it inside the input's value, pressing
+// backspace on the last `0` would strip a digit, then the input
+// would re-render with a fresh `.00`, and the user could never
+// delete the trailing digits. Classic formatting bug.
+//
+// Keeping the suffix separate means backspace behaves normally:
+//   Display: 15,000.00
+//   Backspace → text is "15,000.0" → strip non-digits → "15000"
+//   → re-render as "15,000" + ".00" → looks identical (no change!)
+//
+// Wait — that IS a problem. The user presses backspace and
+// nothing changes visually.
+//
+// ─── The fix: right-aligned input + fixed-width number slot ───
+// We constrain the number input to a fixed width (200px) with
+// `textAlign: 'right'`. The `.00` sits immediately after. Now:
+//   "15,000" right-aligns against the input's right edge
+//   ".00" sits to its right
+// Backspace strips the last digit → "1,500" right-aligns →
+// visually the number shrinks by one digit, `.00` stays put.
+//
+// That's correct and consistent with how money inputs work in
+// banking apps (Wise, Revolut, Monzo all do this).
 // ─────────────────────────────────────────────────────────────
 
 // Cap at 7 digits → max ₦9,999,999 (way above any real errand budget)
 const MAX_DIGITS = 7;
+
+// Fixed width of the number slot (px at 36pt Gabarito).
+// 200px fits "9,999,999" comfortably. If the Figma shows a
+// different max value, adjust here.
+const NUMBER_SLOT_WIDTH = 200;
 
 export default function ErrandBudget() {
   const params = useLocalSearchParams<{
@@ -36,8 +71,8 @@ export default function ErrandBudget() {
     budget?: string;
   }>();
 
-  // Strip any non-digits from an incoming budget (handles back-nav where
-  // params.budget might be "15000" or a formatted string).
+  // Strip any non-digits from an incoming budget (handles back-nav
+  // where params.budget might be "15000" or a formatted string).
   const [budget, setBudget] = useState(
     (params.budget ?? '15000').replace(/\D/g, '')
   );
@@ -97,10 +132,17 @@ export default function ErrandBudget() {
           How much money should we approve for buying these items?
         </Text>
 
-        {/* Giant amount input */}
+        {/* ─── Giant amount input with ".00" suffix ─── */}
         <View className="items-center mb-10">
-          <View className="flex-row items-center justify-center">
-            <Text className="text-[36px] font-gabarito text-ink mr-2">₦</Text>
+          <View className="flex-row items-end justify-center">
+            {/* ₦ prefix */}
+            <Text className="text-[36px] font-gabarito text-ink mr-2">
+              ₦
+            </Text>
+
+            {/* Number — right-aligned in a fixed-width slot so the
+                ".00" suffix stays anchored in place as digits
+                are added/removed. */}
             <TextInput
               value={displayValue}
               onChangeText={handleChange}
@@ -108,10 +150,21 @@ export default function ErrandBudget() {
               placeholder="0"
               placeholderTextColor={colors.subtle}
               className="text-[36px] font-gabarito text-ink"
-              style={{ minWidth: 180 }}
+              style={{
+                width: NUMBER_SLOT_WIDTH,
+                textAlign: 'right',
+              }}
             />
+
+            {/* .00 suffix — decorative, non-editable. Sits to the
+                right of the number input. */}
+            <Text className="text-[36px] font-gabarito text-ink">
+              .00
+            </Text>
           </View>
-          <View className="w-[220px] h-[1px] bg-border mt-2" />
+
+          {/* Underline */}
+          <View className="w-[280px] h-[1px] bg-border mt-2" />
         </View>
 
         {/* Info box */}

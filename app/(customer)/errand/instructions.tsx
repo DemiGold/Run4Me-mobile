@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
@@ -13,6 +12,7 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
 import { Button } from '@/components/ui/Button';
+import { TextArea } from '@/components/ui/TextArea';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
@@ -28,6 +28,8 @@ import { colors } from '@/constants/colors';
 // Attach Photo opens the native picker (photoCount tracked but not
 // uploaded yet). Voice Note is a stub — expo-av wiring comes later.
 // ─────────────────────────────────────────────────────────────
+
+const INSTRUCTIONS_MAX_LENGTH = 500;
 
 export default function ErrandInstructions() {
   const params = useLocalSearchParams<{
@@ -73,7 +75,7 @@ export default function ErrandInstructions() {
         promo: params.promo ?? '',
         pickup: params.pickup ?? '',
         dropoff: params.dropoff ?? '',
-        items: params.items ?? '',   // ← forward the shopping list
+        items: params.items ?? '',
         budget: params.budget ?? '',
         instructions,
         photoCount: String(photoCount),
@@ -115,21 +117,14 @@ export default function ErrandInstructions() {
             substitutes, or delivery details.
           </Text>
 
-          {/* Text Area */}
-          <View
-            className="border border-border rounded-2xl p-4 bg-surface mb-4"
-            style={{ height: 160 }}
-          >
-            <TextInput
-              className="flex-1 text-body-sm font-figtree text-ink"
-              placeholder="Type your instructions here..."
-              placeholderTextColor={colors.subtle}
-              multiline
-              textAlignVertical="top"
-              value={instructions}
-              onChangeText={setInstructions}
-            />
-          </View>
+          {/* Text area — extracted primitive */}
+          <TextArea
+            value={instructions}
+            onChangeText={setInstructions}
+            placeholder="Type your instructions here..."
+            maxLength={INSTRUCTIONS_MAX_LENGTH}
+            className="mb-4"
+          />
 
           {/* Attach buttons row */}
           <View className="flex-row gap-3">

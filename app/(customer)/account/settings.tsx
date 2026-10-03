@@ -1,50 +1,168 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
+import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { Toggle } from '@/components/ui/Toggle';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
-// Settings
+// Settings — wired to the API layer
 //
-// Figma: settings-screen
-//   Grouped sections (Account, Notifications, Location, Payment,
-//   Security, Support, Preferences) with inline Row and ToggleRow.
+// Fourth reference implementation. New patterns:
 //
-// MOCK: all values are placeholder text. Real implementation
-// pulls from authStore.user + GET /me/preferences.
+//   1. READ from authStore — user name/email/phone/dob come from
+//      the logged-in session, not hardcoded strings.
+//
+//   2. PARALLEL background fetches — three API calls (wallet
+//      balance, address count, device count) run on mount and
+//      populate inline VALUES (right side of each Row). If any
+//      fails, we fall back to a "—" placeholder instead of
+//      blocking the whole screen.
+//
+//   3. LOGOUT via API — the sign-out button now calls
+//      api.auth.logout() so the backend can invalidate the
+//      session server-side. Falls through to local clear on
+//      failure.
+//
+// What stays local for now (no endpoints yet):
+//   - Notification preferences (push / email / SMS / promo)
+//   - Biometric / dark mode toggles
+//   These will move to a /me/preferences endpoint later.
 // ─────────────────────────────────────────────────────────────
 
-export default function Settings() {
-  const logout = useAuthStore((state) => state.logout);
+// ═══════════════════════════════════════════════════════════════
+// FORMATTING HELPERS
+// ═══════════════════════════════════════════════════════════════
 
-  // ─── Notification prefs (local state for now) ───
+/**
+ * Shorten an email for display: "adaaez.nwosu@gmail.com" →
+ * "adaaez...@gmail.com". Keeps first 6 chars of the local part.
+ */
+const shortenEmail = (email: string): string => {
+  if (!email) return '';
+  const [local, domain] = email.split('@');
+  if (!domain) return email;
+  const visible = local.slice(0, 6);
+  return `${visible}...@${domain}`;
+};
+
+/**
+ * Mask a phone number: "+2348123456789" → "+234 812 *** 6789"
+ * Assumes Nigerian format but works for anything with 4+ digits.
+ */
+const maskPhone = (phone: string): string => {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 6) return phone;
+  // Show first 3 and last 4 digits, mask the middle
+  const first = digits.slice(0, 3);
+  const last = digits.slice(-4);
+  return `+${first} *** ${last}`;
+};
+
+/**
+ * Format DOB from ISO ("1995-04-12") to "12/04/1995".
+ */
+const formatDob = (iso?: string): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getFullYear()}`;
+};
+
+/**
+ * Format kobo → "₦25,400".
+ */
+const formatNaira = (kobo: number): string =>
+  '₦' + Math.round(kobo / 100).toLocaleString('en-US');
+
+// ═══════════════════════════════════════════════════════════════
+// SCREEN
+// ═══════════════════════════════════════════════════════════════
+
+export default function Settings() {
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+
+  // ─── Local-only prefs (no endpoint yet) ───
   const [push, setPush] = useState(true);
   const [email, setEmail] = useState(true);
   const [sms, setSms] = useState(false);
   const [promo, setPromo] = useState(true);
-
-  // ─── Security prefs ───
   const [biometric, setBiometric] = useState(true);
-
-  // ─── Preferences ───
   const [darkMode, setDarkMode] = useState(false);
 
-  const handleSignOut = () => {
-    logout();
-    router.replace('/(auth)/splash');
+  // ─── Live values fetched from the API ───
+  // null = still loading → show "…" placeholder in the Row
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [addressCount, setAddressCount] = useState<number | null>(null);
+  const [deviceCount, setDeviceCount] = useState<number | null>(null);
+
+  // ─── Pull-to-refresh + sign-out state ───
+  const [refreshing, setRefreshing] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  // ─── Background fetch (runs on mount + refresh) ───
+  // Promise.allSettled means: run all three, don't let one
+  // failure kill the others. Each resolves independently.
+  const fetchLiveValues = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+
+    const [walletRes, locationsRes, devicesRes] = await Promise.allSettled([
+      api.wallet.getBalance(),
+      api.locations.listLocations(),
+      // Device count has no API yet — fall back to a placeholder
+      Promise.resolve({ count: 3 }),
+    ]);
+
+    if (walletRes.status === 'fulfilled') {
+      setWalletBalance(walletRes.value.balance);
+    }
+    if (locationsRes.status === 'fulfilled') {
+      setAddressCount(locationsRes.value.length);
+    }
+    if (devicesRes.status === 'fulfilled') {
+      setDeviceCount((devicesRes.value as { count: number }).count);
+    }
+
+    if (isRefresh) setRefreshing(false);
+  }, []);
+
+  useEffect(() => {
+    fetchLiveValues();
+  }, [fetchLiveValues]);
+
+  // ─── Sign out via API ───
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      // Fire the API call so the backend can invalidate the token.
+      // Even if it fails (offline, backend down), we still clear
+      // local state so the user isn't stuck.
+      await api.auth.logout();
+    } catch {
+      // swallow — local clear below is what actually matters
+    } finally {
+      logout();
+      router.replace('/(auth)/splash');
+    }
   };
 
+  // ─── Delete account ───
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete account?',
@@ -55,7 +173,7 @@ export default function Settings() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            // ─── MOCK: replace with real DELETE /me when backend ships ───
+            // ─── MOCK: replace with DELETE /me when backend ships ───
             logout();
             router.replace('/(auth)/welcome');
           },
@@ -64,10 +182,30 @@ export default function Settings() {
     );
   };
 
+  // ─── Derived display values ───
+  // Loading states render "…" so the row isn't visually broken.
+  const emailValue = user?.email ? shortenEmail(user.email) : '—';
+  const phoneValue = user?.phone ? maskPhone(user.phone) : '—';
+  const dobValue = formatDob(user?.dob);
+  const nameValue = user?.name ?? '—';
+
+  const walletValue =
+    walletBalance === null ? '…' : formatNaira(walletBalance);
+
+  const addressesValue =
+    addressCount === null
+      ? '…'
+      : `${addressCount} ${addressCount === 1 ? 'Address' : 'Addresses'}`;
+
+  const devicesValue =
+    deviceCount === null
+      ? '…'
+      : `${deviceCount} ${deviceCount === 1 ? 'Active' : 'Active'}`;
+
   return (
     <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
 
-      {/* Header */}
+      {/* ─── Header ─── */}
       <View className="flex-row items-center gap-3 px-6 pt-4 pb-4">
         <TouchableOpacity
           onPress={() => router.back()}
@@ -84,21 +222,30 @@ export default function Settings() {
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchLiveValues(true)}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View className="px-6">
 
           {/* ═══ ACCOUNT ═══ */}
+          {/* All values come from authStore.user — no more hardcoding */}
           <Section label="ACCOUNT" />
           <Row
             label="Profile Details"
-            value="Adaaez Nwosu"
+            value={nameValue}
             onPress={() => router.push('/(customer)/profile')}
           />
-          <Row label="Email Address" value="adaaez...@gmail.com" />
-          <Row label="Phone Number" value="+234 812 *** 6789" />
-          <Row label="Date of Birth" value="12/04/1995" last />
+          <Row label="Email Address" value={emailValue} />
+          <Row label="Phone Number" value={phoneValue} />
+          <Row label="Date of Birth" value={dobValue} last />
 
           {/* ═══ NOTIFICATIONS ═══ */}
+          {/* Still local-only — no /me/preferences endpoint yet */}
           <Section label="NOTIFICATIONS" />
           <ToggleRow label="Push Notifications"  value={push}   onChange={setPush} />
           <ToggleRow label="Email Notifications" value={email}  onChange={setEmail} />
@@ -110,7 +257,7 @@ export default function Settings() {
           <Row label="Location Access" value="While Using App" />
           <Row
             label="Saved Locations"
-            value="3 Addresses"
+            value={addressesValue}
             onPress={() => router.push('/(customer)/account/saved-addresses')}
             last
           />
@@ -124,7 +271,7 @@ export default function Settings() {
           />
           <Row
             label="Wallet Details"
-            value="₦25,400"
+            value={walletValue}
             onPress={() => router.push('/(customer)/wallet')}
           />
           <Row
@@ -144,7 +291,7 @@ export default function Settings() {
           <ToggleRow label="Biometric Login" value={biometric} onChange={setBiometric} />
           <Row
             label="Login Devices"
-            value="3 Active"
+            value={devicesValue}
             onPress={() => router.push('/(customer)/account/login-devices')}
           />
           <Row
@@ -177,12 +324,17 @@ export default function Settings() {
           {/* ═══ SIGN OUT ═══ */}
           <TouchableOpacity
             onPress={handleSignOut}
+            disabled={signingOut}
             activeOpacity={0.85}
-            className="border border-status-error rounded-2xl py-4 items-center mt-8 flex-row justify-center gap-2"
+            className={`
+              border border-status-error rounded-2xl py-4
+              items-center mt-8 flex-row justify-center gap-2
+              ${signingOut ? 'opacity-60' : 'opacity-100'}
+            `}
           >
             <Feather name="log-out" size={16} color={colors.danger} />
             <Text className="text-body-sm font-figtree-bold text-status-error">
-              Sign Out
+              {signingOut ? 'Signing out…' : 'Sign Out'}
             </Text>
           </TouchableOpacity>
 
@@ -209,9 +361,6 @@ function Section({ label }: { label: string }) {
 
 // ─────────────────────────────────────────────────────────────
 // Row — a list row with label, optional value, optional chevron
-//   With onPress: tappable, chevron shown (unless danger)
-//   Without: static
-//   danger: red text, no chevron
 // ─────────────────────────────────────────────────────────────
 function Row({
   label,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,68 +12,155 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
+import { api } from '@/services/api';
 import { Button } from '@/components/ui/Button';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
-// Cash Amount Correction
+// Cash Correction — final step in the dispute flow
 //
-// Figma: Cash amount correction
-//   Warning banner · ₦-prefixed field · multi-line note · CTA
+// Customer enters the actual cash they handed over. Submitting
+// calls api.payments.disputeCash with everything (reason, note,
+// correctAmount), then returns to cash-review with the updated
+// amount so the customer can agree to it.
 //
-// Figma's copy is runner-facing ("David disputed ₦17,500").
-// This file uses the customer-side mirror ("You disputed ₦X").
-// To reuse for runner-side, swap the BANNER_TEXT and NOTE_PLACEHOLDER
-// constants below — layout is identical.
+// Units:
+//   `originalAmount` arrives in KOBO from cash-review.
+//   Input field works in NAIRA (users type naira).
+//   Convert:
+//     display = originalKobo / 100
+//     submit  = correctNaira * 100
 //
-// MOCK: submits → back to cash-review.
+// Flow:
+//   cash-review → cash-dispute (pick reason)
+//              → cash-correction (this screen: enter amount)
+//              → disputeCash API call
+//              → cash-review (updated amount)
+//              → confirmCashAmount → errand-confirmed
+//
+// The dispute is only submitted ONCE, here, with all four pieces
+// (paymentId, reason, note, correctAmount). This is why
+// cash-dispute doesn't hit the API itself.
 // ─────────────────────────────────────────────────────────────
 
-const formatNaira = (n: number) =>
-  '₦' + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** Display a kobo amount as naira: 2000000 → "₦20,000". */
+const formatNaira = (kobo: number): string =>
+  '₦' + Math.round(kobo / 100).toLocaleString('en-US');
 
-const formatAmount = (v: string) => {
-  const d = v.replace(/\D/g, '');
-  if (!d) return '';
-  return d.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** Format a raw digit string with thousand separators. */
+const formatAmountInput = (v: string): string => {
+  const digits = v.replace(/\D/g, '');
+  if (!digits) return '';
+  return Number(digits).toLocaleString('en-US');
 };
 
 export default function CashCorrection() {
   const params = useLocalSearchParams<{
-    amount?: string;
-    originalAmount?: string;
+    // From cash-review + cash-dispute
+    originalAmount?: string;    // KOBO
+    amount?: string;            // KOBO (also set)
     errandId?: string;
+    paymentId?: string;
+    runnerName?: string;
+    disputeReason?: string;
+    disputeNote?: string;
+    // Wizard pass-through
+    type?: string;
+    promo?: string;
+    pickup?: string;
+    dropoff?: string;
+    items?: string;
+    budget?: string;
+    instructions?: string;
+    timeline?: string;
+    runnerId?: string;
+    runnerRating?: string;
+    runnerPrice?: string;
+    runnerPickupMins?: string;
+    runnerCompleted?: string;
+    runnerVehicle?: string;
+    paymentMethod?: string;
   }>();
 
-  const disputed = params.originalAmount
-    ? parseInt(params.originalAmount, 10)
-    : 17500;
-  const errandId = params.errandId ?? '';
+  // ─── Original amount (kobo) ───
+  // Prefer `originalAmount` (set by dispute); fall back to
+  // `amount` in case we're reached from a different path.
+  const originalKobo = Number(
+    params.originalAmount ?? params.amount ?? '0'
+  );
 
-  const [amount, setAmount] = useState('15,000');
-  const [note, setNote] = useState('I handed over ₦15,000 at pickup.');
-  const [loading, setLoading] = useState(false);
+  const paymentId = params.paymentId ?? '';
+  const runnerName = params.runnerName ?? 'the runner';
+  const reason = params.disputeReason ?? 'amount-wrong';
+  const note = params.disputeNote ?? '';
 
-  const numericAmount = parseInt(amount.replace(/\D/g, '') || '0', 10);
-  const isValid = numericAmount > 0;
+  // ─── Form state (naira display string) ───
+  // Prefilled with the original amount so the user can just tweak
+  // it if only the cents differ.
+  const [amount, setAmount] = useState(String(Math.round(originalKobo / 100)));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // ─── Derived ───
+  const correctNaira = Number(amount.replace(/\D/g, '') || '0');
+  const correctKobo = correctNaira * 100;
+  const originalNaira = Math.round(originalKobo / 100);
+
+  // Valid when:
+  //   - a positive amount is entered
+  //   - it differs from the original (otherwise why dispute?)
+  const isValid =
+    correctNaira > 0 && correctNaira !== originalNaira;
+
+  // Difference for the delta line — positive if user paid more,
+  // negative if runner over-claimed.
+  const deltaNaira = correctNaira - originalNaira;
+
+  const validationHint = useMemo(() => {
+    if (correctNaira <= 0) return 'Enter the amount you handed over';
+    if (correctNaira === originalNaira)
+      return 'Amount matches what the runner said — no dispute needed';
+    return null;
+  }, [correctNaira, originalNaira]);
+
+  // ─── Submit ───
   const handleSubmit = async () => {
     if (!isValid) return;
-    setLoading(true);
-    try {
-      // ─── MOCK: replace with real API call ───
-      await new Promise((r) => setTimeout(r, 800));
+    if (!paymentId) {
+      setError('Missing payment reference. Please go back and try again.');
+      return;
+    }
 
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      // Full dispute submission — reason, note, and the correct
+      // amount all go in one call.
+      await api.payments.disputeCash(paymentId, {
+        reason,
+        note,
+        correctAmount: correctKobo,   // kobo
+      });
+
+      // Back to cash-review so the customer can see the corrected
+      // amount and tap "Yes, I agree".
       router.replace({
         pathname: '/(customer)/errand/payment/cash-review',
         params: {
-          errandId,
-          amount: String(numericAmount),
-          note,
+          ...params,
+          amount: String(correctKobo),   // updated kobo amount
+          paymentMethod: 'cash',
+          paymentId,
         },
       });
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Could not submit correction. Please try again.'
+      );
+      setSubmitting(false);
     }
   };
 
@@ -117,59 +204,92 @@ export default function CashCorrection() {
                 style={{ marginTop: 2, marginRight: 10 }}
               />
               <Text className="flex-1 text-body-xs font-figtree text-ink leading-5">
-                You disputed {formatNaira(disputed)}. Input the correct cash
-                amount you handed over.
+                {runnerName} says you handed over {formatNaira(originalKobo)}.
+                Input the correct cash amount you handed over.
               </Text>
             </View>
 
-            {/* ─── Correct cash amount ─── */}
+            {/* ─── Error banner ─── */}
+            {error ? (
+              <View className="bg-status-errorLight rounded-2xl px-4 py-3.5 flex-row items-start gap-2.5">
+                <Feather
+                  name="alert-triangle"
+                  size={16}
+                  color={colors.danger}
+                  style={{ marginTop: 2 }}
+                />
+                <Text className="flex-1 text-body-xs font-figtree text-status-error">
+                  {error}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* ─── Amount input ─── */}
             <View>
               <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider mb-2">
                 CORRECT CASH AMOUNT
               </Text>
-              <View className="flex-row items-center h-14 rounded-field px-4 border border-border bg-surface">
+              <View
+                className={`
+                  flex-row items-center h-14 rounded-field px-4
+                  border bg-surface
+                  ${error ? 'border-status-error' : 'border-border'}
+                `}
+              >
                 <Text className="text-body font-figtree text-ink mr-1.5">₦</Text>
                 <TextInput
                   className="flex-1 text-body font-figtree text-ink"
                   value={amount}
-                  onChangeText={(v) => setAmount(formatAmount(v))}
+                  onChangeText={(v) => {
+                    setAmount(formatAmountInput(v));
+                    if (error) setError(null);
+                  }}
                   placeholder="0"
                   placeholderTextColor={colors.subtle}
                   keyboardType="number-pad"
-                  editable={!loading}
+                  editable={!submitting}
                 />
               </View>
+
+              {/* Delta helper — tells the user how much difference
+                  their correction represents */}
+              {isValid ? (
+                <Text className="text-caption font-figtree text-text-light mt-1.5">
+                  {deltaNaira > 0
+                    ? `₦${deltaNaira.toLocaleString('en-US')} more than the runner claimed`
+                    : `₦${Math.abs(deltaNaira).toLocaleString('en-US')} less than the runner claimed`}
+                </Text>
+              ) : validationHint ? (
+                <Text className="text-caption font-figtree text-text-light mt-1.5">
+                  {validationHint}
+                </Text>
+              ) : null}
             </View>
 
-            {/* ─── Optional note (multi-line) ─── */}
-            <View>
-              <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider mb-2">
-                OPTIONAL NOTE
+            {/* ─── Submitted reason recap ─── */}
+            <View className="bg-primary-light rounded-2xl px-4 py-3.5">
+              <Text className="text-micro font-figtree-bold text-primary uppercase tracking-wider mb-1">
+                DISPUTE REASON
               </Text>
-              <View className="rounded-field border border-border bg-surface px-4 py-3.5">
-                <TextInput
-                  className="text-body font-figtree text-ink"
-                  style={{ minHeight: 72, textAlignVertical: 'top' }}
-                  value={note}
-                  onChangeText={setNote}
-                  placeholder="Add any detail that helps (e.g. time, place)"
-                  placeholderTextColor={colors.subtle}
-                  multiline
-                  numberOfLines={4}
-                  editable={!loading}
-                />
-              </View>
+              <Text className="text-body-xs font-figtree text-ink">
+                {reasonLabel(reason)}
+              </Text>
+              {note ? (
+                <Text className="text-caption font-figtree text-muted mt-1.5">
+                  “{note}”
+                </Text>
+              ) : null}
             </View>
 
           </View>
         </ScrollView>
 
-        {/* CTA */}
+        {/* ─── CTA ─── */}
         <View className="px-6 pb-6 pt-3 bg-surface">
           <Button
             variant="primary"
             fullWidth
-            loading={loading}
+            loading={submitting}
             disabled={!isValid}
             onPress={handleSubmit}
           >
@@ -179,4 +299,19 @@ export default function CashCorrection() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+
+/** Human label for a dispute reason id. */
+function reasonLabel(id: string): string {
+  switch (id) {
+    case 'amount-wrong':   return 'Amount is wrong';
+    case 'never-received': return 'I never handed cash';
+    case 'runner-changed': return 'Different runner';
+    case 'other':          return 'Something else';
+    default:               return id;
+  }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,83 +10,156 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
+import { api } from '@/services/api';
+import type { BankDetails, Payment } from '@/services/types';
 import { Button } from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
-// Bank Transfer
+// Bank Transfer — wired to the payments API
 //
-// Shows the bank details the customer must transfer to.
-// The virtual account expires in 30 minutes — after that the
-// transfer will bounce and the user has to restart.
+// Shows the virtual account the customer must transfer to.
+// The account is generated per-errand by the backend and expires
+// after ~30 minutes.
 //
-// Figma: Bank transfer
-//   393 × 697 content, two info cards + countdown + CTA.
+// Data flow:
+//   1. On mount, call api.payments.initiateBankTransfer(errandId, amount).
+//      Returns { payment, bankDetails } — the real bank account
+//      details and a paymentId we'll reference later.
+//   2. Countdown uses `bankDetails.expiresAt` (real expiry from
+//      the backend), not a fixed 30-min-from-load timer. If the
+//      customer backgrounds the app and comes back, the countdown
+//      is still accurate.
+//   3. "I've made the transfer" routes to the confirmation screen
+//      with the paymentId attached so it can poll status.
 //
-// MOCK: bank details come from a MOCK_ACCOUNT constant below.
-// Replace with GET /payments/:id/bank-details when backend ships.
+// Failure modes handled:
+//   - initiateBankTransfer fails → full-screen error with retry
+//   - account expired → banner turns red, CTA disabled
+//   - copy to clipboard → success feedback via icon swap
 // ─────────────────────────────────────────────────────────────
 
-const formatNaira = (n: number) =>
-  '₦' + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-// ─── MOCK: replace with real virtual account from backend ───
-const MOCK_ACCOUNT = {
-  bank: 'Wema Bank',
-  accountNumber: '8047291630',
-  accountName: 'Run4Me Payments',
-};
-
-// Virtual account expiry — 30 minutes from load
-const EXPIRY_SECONDS = 30 * 60;
+const formatNaira = (kobo: number): string =>
+  '₦' + Math.round(kobo / 100).toLocaleString('en-US');
 
 export default function BankTransfer() {
   const params = useLocalSearchParams<{
     amount?: string;
     errandId?: string;
+    // Wizard params pass through
+    type?: string;
+    promo?: string;
+    pickup?: string;
+    dropoff?: string;
+    items?: string;
+    budget?: string;
+    instructions?: string;
+    timeline?: string;
+    runnerName?: string;
+    runnerPrice?: string;
+    runnerRating?: string;
+    runnerPickupMins?: string;
+    runnerCompleted?: string;
+    runnerVehicle?: string;
   }>();
 
-  const amount = params.amount ? parseInt(params.amount, 10) : 17500;
+  // amount comes in kobo (integer). Default if missing.
+  const amount = params.amount ? parseInt(params.amount, 10) : 1_750_000;
   const errandId = params.errandId ?? '';
 
-  const [secondsLeft, setSecondsLeft] = useState(EXPIRY_SECONDS);
+  // ─── Data state ───
+  const [payment, setPayment] = useState<Payment | null>(null);
+  const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // ─── Countdown state ───
+  // secondsLeft drives the display; `expired` is a separate derived
+  // flag so we don't flip the CTA in the middle of a render pass.
+  const [secondsLeft, setSecondsLeft] = useState(0);
+
+  // ─── Copy feedback ───
   const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(false);
 
-  // ─── Countdown ───
+  // ─── Initiate the transfer ───
+  const initiate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.payments.initiateBankTransfer(errandId, amount);
+      setPayment(res.payment);
+      setBankDetails(res.bankDetails);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Could not set up bank transfer. Please try again.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [errandId, amount]);
+
   useEffect(() => {
-    if (secondsLeft <= 0) return;
-    const t = setInterval(() => setSecondsLeft((s) => (s > 0 ? s - 1 : 0)), 1000);
-    return () => clearInterval(t);
-  }, [secondsLeft]);
+    initiate();
+  }, [initiate]);
 
-  const expired = secondsLeft === 0;
+  // ─── Countdown timer ───
+  // Recomputed from the backend's expiresAt on every tick, so
+  // backgrounding / foregrounding doesn't drift the timer.
+  useEffect(() => {
+    if (!bankDetails) return;
+
+    const tick = () => {
+      const expires = new Date(bankDetails.expiresAt).getTime();
+      const now = Date.now();
+      const remaining = Math.max(0, Math.floor((expires - now) / 1000));
+      setSecondsLeft(remaining);
+    };
+
+    // Immediate tick so we don't wait 1s for the first render
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [bankDetails]);
+
+  const expired = secondsLeft === 0 && bankDetails !== null;
+
+  // Format as MM:SS
   const mm = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
   const ss = String(secondsLeft % 60).padStart(2, '0');
 
-  // ─── Copy account number to clipboard ───
+  // ─── Copy account number ───
   const handleCopy = async () => {
-    await Clipboard.setStringAsync(MOCK_ACCOUNT.accountNumber);
+    if (!bankDetails) return;
+    await Clipboard.setStringAsync(bankDetails.accountNumber);
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
 
+  // ─── Confirm — routes forward to the polling screen ───
   const handleConfirm = () => {
-    setLoading(true);
-    // ─── MOCK: route forward to status polling screen ───
+    if (!payment || expired) return;
+
     router.replace({
       pathname: '/(customer)/errand/payment/bank-payment-confirmation',
       params: {
         ...params,
         amount: String(amount),
+        paymentId: payment.id,
         paymentMethod: 'bank',
       },
     });
   };
 
+  // ═══════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════
+
   return (
     <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
-
       {/* Header */}
       <View className="flex-row items-center justify-between px-6 pt-4 pb-5">
         <TouchableOpacity
@@ -102,107 +175,161 @@ export default function BankTransfer() {
         <View className="w-9" />
       </View>
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 24 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View className="px-6 gap-4">
-
-          {/* ─── Total to pay card ─── */}
-          <View className="border border-border rounded-2xl p-4 gap-1.5">
-            <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider">
-              TOTAL TO PAY
-            </Text>
-            <Text className="text-heading-sm font-gabarito text-primary">
-              {formatNaira(amount)}
-            </Text>
-            <Text className="text-caption font-figtree text-muted">
-              Transfer the exact amount below
-            </Text>
-          </View>
-
-          {/* ─── Bank details card ─── */}
-          <View className="border border-border rounded-2xl p-4 gap-4">
-
-            {/* Bank */}
-            <View className="gap-1">
-              <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider">
-                BANK
-              </Text>
-              <Text className="text-body-sm font-figtree-bold text-ink">
-                {MOCK_ACCOUNT.bank}
-              </Text>
+      {/* ═══ Loading — skeleton cards ═══ */}
+      {loading ? (
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View className="px-6 gap-4">
+            {/* Total to pay */}
+            <View className="border border-border rounded-2xl p-4">
+              <Skeleton width="40%" height={10} className="mb-3" />
+              <Skeleton width="60%" height={26} className="mb-2" />
+              <Skeleton width="80%" height={11} />
             </View>
 
-            {/* Account number — tappable to copy */}
-            <TouchableOpacity
-              onPress={handleCopy}
-              activeOpacity={0.7}
-              className="gap-1"
-            >
-              <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider">
-                ACCOUNT NUMBER
-              </Text>
-              <View className="flex-row items-center gap-2">
-                <Text className="text-body-sm font-figtree-bold text-ink tracking-wider">
-                  {MOCK_ACCOUNT.accountNumber}
-                </Text>
-                <Feather
-                  name={copied ? 'check' : 'copy'}
-                  size={14}
-                  color={copied ? colors.success : colors.primary}
-                />
+            {/* Bank details */}
+            <View className="border border-border rounded-2xl p-4 gap-4">
+              <View className="gap-2">
+                <Skeleton width="25%" height={10} />
+                <Skeleton width="50%" height={14} />
               </View>
-            </TouchableOpacity>
+              <View className="gap-2">
+                <Skeleton width="40%" height={10} />
+                <Skeleton width="70%" height={14} />
+              </View>
+              <View className="gap-2">
+                <Skeleton width="35%" height={10} />
+                <Skeleton width="60%" height={14} />
+              </View>
+            </View>
 
-            {/* Account name */}
-            <View className="gap-1">
+            {/* Expiry banner */}
+            <Skeleton width="100%" height={44} radius={16} />
+          </View>
+        </ScrollView>
+      ) : null}
+
+      {/* ═══ Error ═══ */}
+      {!loading && error ? (
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1 }}
+        >
+          <EmptyState
+            icon="alert-circle"
+            title="Couldn't set up transfer"
+            body={error}
+            actionLabel="Retry"
+            onAction={initiate}
+          />
+        </ScrollView>
+      ) : null}
+
+      {/* ═══ Loaded ═══ */}
+      {!loading && !error && bankDetails ? (
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View className="px-6 gap-4">
+
+            {/* ─── Total to pay card ─── */}
+            <View className="border border-border rounded-2xl p-4 gap-1.5">
               <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider">
-                ACCOUNT NAME
+                TOTAL TO PAY
               </Text>
-              <Text className="text-body-sm font-figtree-bold text-ink">
-                {MOCK_ACCOUNT.accountName}
+              <Text className="text-heading-sm font-gabarito text-primary">
+                {formatNaira(amount)}
+              </Text>
+              <Text className="text-caption font-figtree text-muted">
+                Transfer the exact amount below
               </Text>
             </View>
 
-          </View>
+            {/* ─── Bank details card ─── */}
+            <View className="border border-border rounded-2xl p-4 gap-4">
+              {/* Bank */}
+              <View className="gap-1">
+                <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider">
+                  BANK
+                </Text>
+                <Text className="text-body-sm font-figtree-bold text-ink">
+                  {bankDetails.bank}
+                </Text>
+              </View>
 
-          {/* ─── Expiry banner ─── */}
-          <View
-            className={`
-              rounded-2xl px-4 py-3.5
-              ${expired ? 'bg-status-errorLight' : 'bg-accent-light'}
-            `}
-          >
-            <Text
+              {/* Account number — tap to copy */}
+              <TouchableOpacity
+                onPress={handleCopy}
+                activeOpacity={0.7}
+                className="gap-1"
+              >
+                <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider">
+                  ACCOUNT NUMBER
+                </Text>
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-body-sm font-figtree-bold text-ink tracking-wider">
+                    {bankDetails.accountNumber}
+                  </Text>
+                  <Feather
+                    name={copied ? 'check' : 'copy'}
+                    size={14}
+                    color={copied ? colors.success : colors.primary}
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {/* Account name */}
+              <View className="gap-1">
+                <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider">
+                  ACCOUNT NAME
+                </Text>
+                <Text className="text-body-sm font-figtree-bold text-ink">
+                  {bankDetails.accountName}
+                </Text>
+              </View>
+            </View>
+
+            {/* ─── Expiry banner ─── */}
+            <View
               className={`
-                text-caption font-figtree
-                ${expired ? 'text-status-error' : 'text-muted'}
+                rounded-2xl px-4 py-3.5
+                ${expired ? 'bg-status-errorLight' : 'bg-accent-light'}
               `}
             >
-              {expired
-                ? 'This account has expired. Please go back and start again.'
-                : `This account expires in ${mm}:${ss}`}
-            </Text>
-          </View>
+              <Text
+                className={`
+                  text-caption font-figtree
+                  ${expired ? 'text-status-error' : 'text-muted'}
+                `}
+              >
+                {expired
+                  ? 'This account has expired. Please go back and start again.'
+                  : `This account expires in ${mm}:${ss}`}
+              </Text>
+            </View>
 
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      ) : null}
 
       {/* ─── CTA ─── */}
-      <View className="px-6 pb-6 pt-3 bg-surface">
-        <Button
-          variant="primary"
-          fullWidth
-          loading={loading}
-          disabled={expired}
-          onPress={handleConfirm}
-        >
-          I've made the transfer
-        </Button>
-      </View>
-
+      {!loading && !error && bankDetails ? (
+        <View className="px-6 pb-6 pt-3 bg-surface">
+          <Button
+            variant="primary"
+            fullWidth
+            disabled={expired}
+            onPress={handleConfirm}
+          >
+            I've made the transfer
+          </Button>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

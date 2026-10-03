@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,21 +12,35 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
+import { api } from '@/services/api';
 import { Button } from '@/components/ui/Button';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
-// Rate Runner
+// Rate Runner — wired to the errands API
 //
-// Post-errand screen. Overall rating + per-category ratings +
-// feedback + optional tip. Submitting returns to customer home.
+// Post-errand feedback screen. Captures:
+//   - Overall star rating (1-5)
+//   - Per-category ratings (speed, communication, professionalism)
+//   - Optional comment
+//   - Optional tip
 //
-// Figma: rate-runner
-//   5 large stars · 3 category rows · feedback textarea ·
-//   tip pill selector · submit CTA.
+// Submitting calls api.errands.rateErrand(errandId, payload) and
+// then returns to the customer home tab.
 //
-// MOCK: submit routes to (customer) with no API call.
-// Replace with POST /errands/:id/rate when backend ships.
+// Units:
+//   User picks a tip in NAIRA (₦500, ₦1000, ₦2000, custom).
+//   The API expects KOBO. We convert once at submission:
+//     tipKobo = tipNaira * 100
+//   Same convention as the payment screens.
+//
+// Defaults:
+//   Overall + category ratings start at 5 (best). This is
+//   deliberate — it's easier to lower a rating than raise one,
+//   and most customers are happy with the service.
+//   Tip defaults to ₦1,000. If the customer doesn't want to tip,
+//   they can... well, there's no "no tip" option in Figma.
+//   Keeping the default as-is to match design.
 // ─────────────────────────────────────────────────────────────
 
 type RatingCategory = {
@@ -41,25 +55,42 @@ const RATING_CATEGORIES: RatingCategory[] = [
 ];
 
 const TIP_OPTIONS = [
-  { id: '500',    label: '₦500' },
-  { id: '1000',   label: '₦1,000' },
-  { id: '2000',   label: '₦2,000' },
-  { id: 'custom', label: 'Custom' },
-];
-
-// ─── MOCK: replace with the runner's name from route params ───
-const RUNNER_NAME = 'David';
+  { id: '500',    label: '₦500',   amountNaira: 500   },
+  { id: '1000',   label: '₦1,000', amountNaira: 1000  },
+  { id: '2000',   label: '₦2,000', amountNaira: 2000  },
+  { id: 'custom', label: 'Custom', amountNaira: 0     },
+] as const;
 
 export default function RateRunner() {
   const params = useLocalSearchParams<{
-    id?: string;
+    errandId?: string;
+    id?: string;              // legacy alias
     pickup?: string;
     dropoff?: string;
     runnerName?: string;
+    // Wizard pass-through
+    amount?: string;
+    paymentMethod?: string;
+    paymentId?: string;
+    type?: string;
+    promo?: string;
+    items?: string;
+    budget?: string;
+    instructions?: string;
+    timeline?: string;
+    runnerId?: string;
+    runnerRating?: string;
+    runnerPrice?: string;
+    runnerPickupMins?: string;
+    runnerCompleted?: string;
+    runnerVehicle?: string;
   }>();
 
-  const runnerName = params.runnerName ?? RUNNER_NAME;
+  // Prefer `errandId`, fall back to legacy `id`.
+  const errandId = params.errandId || params.id || '';
+  const runnerName = params.runnerName ?? 'your Runner';
 
+  // ─── Form state ───
   const [overallRating, setOverallRating] = useState(5);
   const [categoryRatings, setCategoryRatings] = useState<Record<string, number>>({
     speed: 5,
@@ -67,29 +98,67 @@ export default function RateRunner() {
     professionalism: 5,
   });
   const [feedback, setFeedback] = useState('');
-  const [selectedTip, setSelectedTip] = useState('1000');
+  const [selectedTip, setSelectedTip] = useState<string>('1000');
   const [customTip, setCustomTip] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
+  // ─── Submission state ───
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ─── Category rating updater ───
   const updateCategory = (id: string, value: number) => {
     setCategoryRatings((prev) => ({ ...prev, [id]: value }));
   };
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    try {
-      // ─── MOCK: replace with POST /errands/:id/rate ───
-      await new Promise((r) => setTimeout(r, 800));
+  // ─── Derived tip amount in kobo ───
+  // If 'custom' is selected, use the typed value. Otherwise use
+  // the preset amount. Always convert naira → kobo.
+  const tipKobo = useMemo(() => {
+    if (selectedTip === 'custom') {
+      const customNaira = Number(customTip.replace(/\D/g, '') || '0');
+      return customNaira * 100;
+    }
+    const option = TIP_OPTIONS.find((o) => o.id === selectedTip);
+    return (option?.amountNaira ?? 0) * 100;
+  }, [selectedTip, customTip]);
 
-      // Real call would send:
-      // {
-      //   overallRating,
-      //   categoryRatings,
-      //   feedback,
-      //   tipAmount: selectedTip === 'custom' ? Number(customTip) : Number(selectedTip),
-      // }
+  // Can we submit?
+  //   - Need an errandId
+  //   - If 'custom' is selected, the tip field must be valid (>0)
+  const canSubmit = useMemo(() => {
+    if (!errandId) return false;
+    if (submitting) return false;
+    if (selectedTip === 'custom' && Number(customTip) <= 0) return false;
+    return true;
+  }, [errandId, submitting, selectedTip, customTip]);
+
+  // ─── Submit ───
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      // Rate the errand on the backend. The API also records the
+      // tip — when the runner side ships, that tip is what ends
+      // up in their earnings ledger.
+      await api.errands.rateErrand(errandId, {
+        stars: overallRating,
+        categoryRatings,
+        comment: feedback.trim() || undefined,
+        tip: tipKobo > 0 ? tipKobo : undefined,
+      });
+
+      // Back to customer home. Use replace so the user can't
+      // navigate back into the rating flow.
       router.replace('/(customer)');
-    } finally {
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Could not submit rating. Please try again.'
+      );
       setSubmitting(false);
     }
   };
@@ -122,12 +191,27 @@ export default function RateRunner() {
           showsVerticalScrollIndicator={false}
         >
           <View className="px-6">
-            {/* Title */}
+            {/* ─── Title ─── */}
             <Text className="text-heading-sm font-gabarito text-ink text-center mt-2 mb-5">
               How was your experience?
             </Text>
 
-            {/* Overall rating — 5 large stars */}
+            {/* ─── Error banner ─── */}
+            {error ? (
+              <View className="bg-status-errorLight rounded-2xl px-4 py-3.5 flex-row items-start gap-2.5 mb-5">
+                <Feather
+                  name="alert-triangle"
+                  size={16}
+                  color={colors.danger}
+                  style={{ marginTop: 2 }}
+                />
+                <Text className="flex-1 text-body-xs font-figtree text-status-error">
+                  {error}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* ─── Overall rating — 5 large stars ─── */}
             <View className="flex-row justify-center gap-2 mb-7">
               {[1, 2, 3, 4, 5].map((star) => (
                 <TouchableOpacity
@@ -135,20 +219,20 @@ export default function RateRunner() {
                   onPress={() => setOverallRating(star)}
                   activeOpacity={0.7}
                   hitSlop={6}
+                  disabled={submitting}
                 >
                   <Feather
-                    name={star <= overallRating ? 'star' : 'star'}
+                    name="star"
                     size={34}
-                    color={star <= overallRating ? colors.accent : colors.borderLight}
-                    // Feather "star" is always filled — using color to
-                    // distinguish selected (accent) vs unselected (light gray).
-                    // For unfilled outline, Ionicons has `star-outline`.
+                    color={
+                      star <= overallRating ? colors.accent : colors.borderLight
+                    }
                   />
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* Category ratings card */}
+            {/* ─── Category ratings card ─── */}
             <View className="border border-border rounded-2xl p-4 bg-surface mb-5">
               {RATING_CATEGORIES.map((cat, index) => {
                 const isLast = index === RATING_CATEGORIES.length - 1;
@@ -173,6 +257,7 @@ export default function RateRunner() {
                           onPress={() => updateCategory(cat.id, star)}
                           activeOpacity={0.7}
                           hitSlop={4}
+                          disabled={submitting}
                         >
                           <Feather
                             name="star"
@@ -189,7 +274,7 @@ export default function RateRunner() {
               })}
             </View>
 
-            {/* Feedback textarea */}
+            {/* ─── Feedback textarea ─── */}
             <View
               className="border border-border rounded-2xl bg-surface mb-6"
               style={{ height: 110 }}
@@ -202,10 +287,11 @@ export default function RateRunner() {
                 textAlignVertical="top"
                 value={feedback}
                 onChangeText={setFeedback}
+                editable={!submitting}
               />
             </View>
 
-            {/* Tip section */}
+            {/* ─── Tip section ─── */}
             <Text className="text-body-sm font-gabarito-bold text-ink mb-3">
               Support {runnerName} with a Tip
             </Text>
@@ -218,11 +304,13 @@ export default function RateRunner() {
                     key={tip.id}
                     onPress={() => setSelectedTip(tip.id)}
                     activeOpacity={0.75}
+                    disabled={submitting}
                     className={`
                       rounded-full px-5 py-2.5
-                      ${isSelected
-                        ? 'bg-primary'
-                        : 'bg-surface border border-border'
+                      ${
+                        isSelected
+                          ? 'bg-primary'
+                          : 'bg-surface border border-border'
                       }
                     `}
                   >
@@ -239,7 +327,7 @@ export default function RateRunner() {
               })}
             </View>
 
-            {/* Custom tip input — only when Custom selected */}
+            {/* ─── Custom tip input — only when Custom selected ─── */}
             {selectedTip === 'custom' ? (
               <View className="flex-row items-center h-14 rounded-field px-4 border border-border bg-surface mb-4">
                 <Text className="text-body font-figtree text-ink mr-1.5">₦</Text>
@@ -250,18 +338,20 @@ export default function RateRunner() {
                   keyboardType="number-pad"
                   value={customTip}
                   onChangeText={(v) => setCustomTip(v.replace(/\D/g, ''))}
+                  editable={!submitting}
                 />
               </View>
             ) : null}
           </View>
         </ScrollView>
 
-        {/* Bottom CTA */}
+        {/* ─── Bottom CTA ─── */}
         <View className="px-6 pb-6 pt-3">
           <Button
             variant="primary"
             fullWidth
             loading={submitting}
+            disabled={!canSubmit}
             onPress={handleSubmit}
           >
             Submit Rating

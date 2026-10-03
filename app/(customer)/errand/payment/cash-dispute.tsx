@@ -16,18 +16,29 @@ import { Button } from '@/components/ui/Button';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
-// Cash Dispute
+// Cash Dispute — reason collector
 //
-// Opened from cash-review when the customer disagrees with the
-// runner's claimed amount. Collects a reason + optional note,
-// then routes to cash-correction where the customer enters the
-// correct amount.
+// Step 1 of 2 in the dispute flow. Customer picks a reason and
+// optionally explains. The actual dispute (with the corrected
+// amount) is submitted on cash-correction, not here.
 //
-// Figma: (not specced — designed to match the payment flow)
+// Why not call the API here:
+//   `api.payments.disputeCash(paymentId, { reason, note, correctAmount })`
+//   requires the CORRECT amount — which the customer enters on
+//   the next screen. Recording a partial dispute without an
+//   amount would leave the backend with an incomplete record.
+//
+//   Instead we pass { reason, note } forward and let
+//   cash-correction call disputeCash with everything at once.
+//
+// Units:
+//   `amount` arrives in KOBO from cash-review (which got it from
+//   cash.tsx). formatNaira divides by 100 for display.
 // ─────────────────────────────────────────────────────────────
 
-const formatNaira = (n: number) =>
-  '₦' + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** Display a kobo amount as naira: 2000000 → "₦20,000". */
+const formatNaira = (kobo: number): string =>
+  '₦' + Math.round(kobo / 100).toLocaleString('en-US');
 
 type Reason =
   | 'amount-wrong'
@@ -36,46 +47,91 @@ type Reason =
   | 'other';
 
 const REASONS: { id: Reason; label: string; hint: string }[] = [
-  { id: 'amount-wrong',   label: "Amount is wrong",       hint: "The runner claimed more or less than what I gave" },
-  { id: 'never-received', label: "I never handed cash",   hint: "Payment method should be different" },
-  { id: 'runner-changed', label: "Different runner",      hint: "A different person showed up" },
-  { id: 'other',          label: "Something else",        hint: "I'll explain below" },
+  {
+    id: 'amount-wrong',
+    label: 'Amount is wrong',
+    hint: 'The runner claimed more or less than what I gave',
+  },
+  {
+    id: 'never-received',
+    label: 'I never handed cash',
+    hint: 'Payment method should be different',
+  },
+  {
+    id: 'runner-changed',
+    label: 'Different runner',
+    hint: 'A different person showed up',
+  },
+  {
+    id: 'other',
+    label: 'Something else',
+    hint: "I'll explain below",
+  },
 ];
 
 export default function CashDispute() {
   const params = useLocalSearchParams<{
-    amount?: string;
+    amount?: string;          // KOBO from cash-review
     errandId?: string;
+    paymentId?: string;
     runnerName?: string;
+    // Wizard pass-through
+    type?: string;
+    promo?: string;
+    pickup?: string;
+    dropoff?: string;
+    items?: string;
+    budget?: string;
+    instructions?: string;
+    timeline?: string;
+    runnerNameUpper?: string;
+    runnerId?: string;
+    runnerRating?: string;
+    runnerPrice?: string;
+    runnerPickupMins?: string;
+    runnerCompleted?: string;
+    runnerVehicle?: string;
+    paymentMethod?: string;
   }>();
 
-  const amount = params.amount ? parseInt(params.amount, 10) : 17500;
+  // amount in kobo — display only here, forwarded unchanged.
+  const amountKobo = params.amount ? parseInt(params.amount, 10) : 0;
   const runnerName = params.runnerName ?? 'the runner';
 
   const [reason, setReason] = useState<Reason | null>(null);
   const [note, setNote] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const canSubmit = reason !== null;
+  const canSubmit = reason !== null && !submitting;
 
+  // ─── Continue ───
+  // We don't hit the API here — cash-correction submits the full
+  // dispute with reason + note + corrected amount in one call.
+  // We just forward the collected inputs.
   const handleSubmit = async () => {
     if (!reason) return;
-    setLoading(true);
+
+    setSubmitting(true);
     try {
-      // ─── MOCK: replace with POST /payments/:id/dispute ───
-      await new Promise((r) => setTimeout(r, 800));
+      // Tiny delay so the button spinner is visible — makes the
+      // navigation feel deliberate rather than instant.
+      await new Promise((r) => setTimeout(r, 250));
 
       router.replace({
         pathname: '/(customer)/errand/payment/cash-correction',
         params: {
           ...params,
-          originalAmount: String(amount),
+          // originalAmount preserves the amount we're disputing.
+          // cash-correction will use this to compute the delta.
+          originalAmount: String(amountKobo),
           disputeReason: reason,
-          disputeNote: note,
+          disputeNote: note.trim(),
         },
       });
-    } finally {
-      setLoading(false);
+    } catch {
+      // Nothing to catch — the delay can't fail. But keeping the
+      // try/finally makes the state cleanup bulletproof.
+      setSubmitting(false);
     }
   };
 
@@ -107,8 +163,7 @@ export default function CashDispute() {
           showsVerticalScrollIndicator={false}
         >
           <View className="px-6 gap-5">
-
-            {/* Warning banner */}
+            {/* ─── Warning banner ─── */}
             <View className="bg-status-errorLight rounded-2xl px-4 py-3.5 flex-row items-start">
               <Feather
                 name="alert-triangle"
@@ -117,13 +172,13 @@ export default function CashDispute() {
                 style={{ marginTop: 2, marginRight: 10 }}
               />
               <Text className="flex-1 text-body-xs font-figtree text-ink leading-5">
-                {runnerName} says you handed over {formatNaira(amount)}. If this
-                is incorrect, tell us why and enter the correct amount on the
-                next screen.
+                {runnerName} says you handed over {formatNaira(amountKobo)}. If
+                this is incorrect, tell us why and enter the correct amount on
+                the next screen.
               </Text>
             </View>
 
-            {/* Reason picker */}
+            {/* ─── Reason picker ─── */}
             <View>
               <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider mb-3">
                 WHAT WENT WRONG?
@@ -137,18 +192,24 @@ export default function CashDispute() {
                       key={r.id}
                       onPress={() => setReason(r.id)}
                       activeOpacity={0.8}
+                      disabled={submitting}
                       className={`
                         rounded-2xl p-4 border flex-row items-center gap-3
-                        ${isSelected
-                          ? 'border-primary bg-primary-light'
-                          : 'border-border bg-surface'
+                        ${
+                          isSelected
+                            ? 'border-primary bg-primary-light'
+                            : 'border-border bg-surface'
                         }
                       `}
                     >
                       <View
                         className={`
                           w-5 h-5 rounded-full border-2 items-center justify-center
-                          ${isSelected ? 'border-primary' : 'border-border-light'}
+                          ${
+                            isSelected
+                              ? 'border-primary'
+                              : 'border-border-light'
+                          }
                         `}
                       >
                         {isSelected ? (
@@ -175,7 +236,7 @@ export default function CashDispute() {
               </View>
             </View>
 
-            {/* Optional note */}
+            {/* ─── Optional note ─── */}
             <View>
               <Text className="text-micro font-figtree-bold text-muted uppercase tracking-wider mb-2">
                 OPTIONAL NOTE
@@ -193,20 +254,19 @@ export default function CashDispute() {
                   placeholderTextColor={colors.subtle}
                   multiline
                   numberOfLines={4}
-                  editable={!loading}
+                  editable={!submitting}
                 />
               </View>
             </View>
-
           </View>
         </ScrollView>
 
-        {/* CTA */}
+        {/* ─── CTA ─── */}
         <View className="px-6 pb-6 pt-3 bg-surface">
           <Button
             variant="primary"
             fullWidth
-            loading={loading}
+            loading={submitting}
             disabled={!canSubmit}
             onPress={handleSubmit}
           >

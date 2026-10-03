@@ -11,26 +11,45 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
+import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/Button';
 import { colors } from '@/constants/colors';
 
 // ─────────────────────────────────────────────────────────────
-// OTP Screen
+// OTP Screen — wired to the auth API
 //
-// Reads `identifier` from route params (set by Sign In or
-// Customer Registration) and displays a masked version in the
-// "sent to ..." line.
+// Reads `identifier` from route params (set by Sign In, Customer
+// Registration, or Runner Registration) and displays a masked
+// version in the "sent to ..." line.
 //
-// MOCK verification — the correct code is '123456'. Replace
-// with a real API call when Samuel ships the endpoint.
+// Flow:
+//   1. User enters 6 digits.
+//   2. On the 6th digit, auto-submit fires handleVerify.
+//   3. handleVerify calls api.auth.verifyOtp(identifier, code).
+//   4. On success, the API returns { token, refreshToken, user }.
+//   5. We call authStore.login(user, token) to replace the
+//      "pending" user seeded at sign-in with the real one.
+//   6. Route to location-permission with the user's role.
+//
+// Mock: correct code is '123456' (enforced inside
+// services/api/auth.ts). Wrong code throws ApiError('OTP_INVALID').
+//
+// Why `login(user, token)` and not `setUser(user)`:
+//   - We need BOTH the user AND the token in the store.
+//   - login() sets both in a single state update → one render.
+//   - setUser alone would leave the token null and break any
+//     downstream call that needs auth headers.
 // ─────────────────────────────────────────────────────────────
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 60;
-const MOCK_CORRECT_CODE = '123456';
 
-// Mask a phone or email for display.
+/**
+ * Mask a phone or email for the "sent to ..." line.
+ *   Email: adaaez.nwosu@gmail.com → ada***@gmail.com
+ *   Phone: +2348123456789        → 2348***89
+ */
 const maskIdentifier = (raw: string): string => {
   if (!raw) return 'your contact';
   const trimmed = raw.trim();
@@ -41,7 +60,6 @@ const maskIdentifier = (raw: string): string => {
     return `${visible}${'*'.repeat(Math.max(user.length - 3, 2))}@${domain}`;
   }
 
-  // Phone: keep first 4 and last 2 visible
   const digits = trimmed.replace(/\D/g, '');
   if (digits.length < 6) return trimmed;
   const first = digits.slice(0, 4);
@@ -53,6 +71,7 @@ export default function OTPScreen() {
   const params = useLocalSearchParams<{ identifier?: string }>();
   const identifier = params.identifier ?? '';
 
+  // ─── Local UI state ───
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +79,14 @@ export default function OTPScreen() {
   const [resendIn, setResendIn] = useState(RESEND_SECONDS);
 
   const inputRefs = useRef<Array<TextInput | null>>([]);
-  const user = useAuthStore((state) => state.user);
+
+  // ─── Auth store ───
+  // `login(user, token)` is our one call that populates both.
+  // `pendingUser` is the half-empty user seeded by sign-in — we
+  // use it ONLY to know which role to route to if the API fails
+  // to return a role.
+  const login = useAuthStore((state) => state.login);
+  const pendingUser = useAuthStore((state) => state.user);
 
   // ─── Resend countdown ───
   useEffect(() => {
@@ -72,10 +98,12 @@ export default function OTPScreen() {
   const otpString = otp.join('');
   const isComplete = otpString.length === OTP_LENGTH;
 
-  // ─── Verify ───
+  // ─── Verify — calls the API and logs the user in ───
   const handleVerify = useCallback(
     async (code?: string) => {
       const value = code ?? otpString;
+
+      // Guard: user tapped Verify with fewer than 6 digits
       if (value.length !== OTP_LENGTH) {
         setError('Enter the 6-digit code to continue.');
         return;
@@ -85,28 +113,41 @@ export default function OTPScreen() {
       setError(null);
 
       try {
-        // ─── MOCK: replace with real API call ───
-        await new Promise((r) => setTimeout(r, 800));
+        // api.auth.verifyOtp returns { token, refreshToken, user }.
+        // The mock throws ApiError('OTP_INVALID') on wrong code, so
+        // we no longer branch on the code ourselves.
+        const response = await api.auth.verifyOtp(identifier, value);
 
-        if (value !== MOCK_CORRECT_CODE) {
-          setError('The code you entered is incorrect. Please try again.');
-          setOtp(Array(OTP_LENGTH).fill(''));
-          inputRefs.current[0]?.focus();
-          setLoading(false);
-          return;
-        }
+        // Persist the real user + session token. This REPLACES the
+        // "pending" user that sign-in seeded with empty fields.
+        // After this line, useAuthStore().user has the full profile
+        // (name, phone, dob) and useAuthStore().token is populated.
+        login(response.user, response.token);
 
-        const userRole = user?.role || 'customer';
+        // Route based on the authenticated user's role.
+        // Falls back to the pending user's role if the API didn't
+        // return one (shouldn't happen, but defensive).
+        const userRole = response.user.role ?? pendingUser?.role ?? 'customer';
+
         router.replace({
           pathname: '/(auth)/location-permission',
           params: { role: userRole },
         });
-      } catch {
-        setError('Something went wrong. Please try again.');
+      } catch (e) {
+        // ApiError has a `message` (human-readable) we can show
+        // directly. Non-ApiError throws fall back to a generic.
+        const message =
+          e instanceof Error
+            ? e.message
+            : 'The code you entered is incorrect. Please try again.';
+
+        setError(message);
+        setOtp(Array(OTP_LENGTH).fill(''));
+        inputRefs.current[0]?.focus();
         setLoading(false);
       }
     },
-    [otpString, user]
+    [otpString, identifier, login, pendingUser]
   );
 
   // ─── Auto-submit when 6 digits are filled ───
@@ -158,21 +199,29 @@ export default function OTPScreen() {
     }
   };
 
-  // ─── Resend ───
-  const handleResend = () => {
+  // ─── Resend — asks the API for a fresh code ───
+  const handleResend = async () => {
     if (resendIn > 0) return;
+
+    // Optimistic UI: reset immediately so the user sees feedback
     setOtp(Array(OTP_LENGTH).fill(''));
     setError(null);
     setResendIn(RESEND_SECONDS);
     inputRefs.current[0]?.focus();
-    // ─── MOCK: replace with real resend API call ───
+
+    try {
+      await api.auth.resendOtp(identifier);
+    } catch {
+      // Silent — the countdown is already running. If this matters,
+      // we'd show a Toast. For now, the user can just try again.
+    }
   };
 
   const mm = String(Math.floor(resendIn / 60)).padStart(2, '0');
   const ss = String(resendIn % 60).padStart(2, '0');
 
   return (
-    <SafeAreaView className="flex-1 bg-surface">
+    <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         className="flex-1"
@@ -214,11 +263,12 @@ export default function OTPScreen() {
                 }}
                 className={`
                   flex-1 h-14 border rounded-2xl text-center text-title font-gabarito text-ink
-                  ${error
-                    ? 'border-status-error bg-status-errorLight'
-                    : focusedIndex === index
-                    ? 'border-primary bg-surface'
-                    : 'border-border bg-background-light'
+                  ${
+                    error
+                      ? 'border-status-error bg-status-errorLight'
+                      : focusedIndex === index
+                      ? 'border-primary bg-surface'
+                      : 'border-border bg-background-light'
                   }
                 `}
                 keyboardType="number-pad"
@@ -249,8 +299,7 @@ export default function OTPScreen() {
             <View className="mb-8" />
           )}
 
-          {/* Verify Button — always full teal, always tappable.
-              Missing digits → shows error in the banner above. */}
+          {/* Verify Button */}
           <Button
             variant="primary"
             fullWidth
@@ -258,7 +307,7 @@ export default function OTPScreen() {
             onPress={() => handleVerify()}
             className="mb-7"
           >
-            Verify & Continue
+            Verify &amp; Continue
           </Button>
 
           {/* Footer Links */}
