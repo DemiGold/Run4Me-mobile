@@ -1,21 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  Image,
+  Dimensions,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
 
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { Button } from '@/components/ui/Button';
+import { colors } from '@/constants/colors';
+
+// ─────────────────────────────────────────────────────────────
+// Finding Runner
+//
+// Shown after checkout as we match the customer with a runner.
+// Progress bar fills over ~5 seconds, then routes to the
+// available-runners list.
+//
+// Figma: finding-runner
+//   Map (62% height) with route line + pins · bottom sheet with
+//   progress bar + Cancel Request.
+//
+// MOCK: matching takes 5s. Real flow: poll GET /errands/:id/match
+// or subscribe via WebSocket until a runner is assigned.
+// ─────────────────────────────────────────────────────────────
 
 const { height } = Dimensions.get('window');
 const MAP_HEIGHT = height * 0.62;
+
 const MAP_IMAGE = require('@/assets/map.png');
 
+// Match simulation timings (mock — swap for real polling)
+const MOCK_MATCH_MS = 5000;
+const PROGRESS_TICK_MS = 800;
+
 export default function FindingRunner() {
+  const insets = useSafeAreaInsets();
+
   const params = useLocalSearchParams<{
     type?: string;
     promo?: string;
     pickup?: string;
     dropoff?: string;
+    items?: string;
     budget?: string;
     instructions?: string;
     timeline?: string;
@@ -25,47 +53,45 @@ export default function FindingRunner() {
 
   const [progress, setProgress] = useState(35);
 
-  const [fontsLoaded] = useFonts({
-    Gabarito_800ExtraBold,
-    Figtree_500Medium,
-    Figtree_700Bold,
-  });
-
-  // Simulate progress growth + auto-match after a few seconds
+  // ─── Mock match: grow progress bar, auto-advance after 5s ───
   useEffect(() => {
     const interval = setInterval(() => {
       setProgress((p) => (p >= 95 ? 95 : p + 5));
-    }, 800);
+    }, PROGRESS_TICK_MS);
 
     const timeout = setTimeout(() => {
       router.replace({
         pathname: '/(customer)/errand/available-runners',
         params,
       });
-    }, 5000);
+    }, MOCK_MATCH_MS);
 
     return () => {
       clearInterval(interval);
       clearTimeout(timeout);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  if (!fontsLoaded) return null;
 
   const handleCancel = () => {
     router.replace('/(customer)');
   };
 
   return (
-    <View className="flex-1 bg-white">
-      {/* ═══ MAP — full width, ~62% height ═══ */}
+    <View className="flex-1 bg-surface">
+
+      {/* ═══ MAP ═══ */}
       <View
         className="w-full rounded-b-3xl overflow-hidden relative"
         style={{ height: MAP_HEIGHT }}
       >
-        <Image source={MAP_IMAGE} className="w-full h-full" resizeMode="cover" />
+        <Image
+          source={MAP_IMAGE}
+          className="w-full h-full"
+          resizeMode="cover"
+        />
 
-        {/* Route line (decorative — pink/magenta) */}
+        {/* Route line — decorative, teal (was off-palette magenta) */}
         <View
           className="absolute rounded-full"
           style={{
@@ -73,60 +99,63 @@ export default function FindingRunner() {
             left: '20%',
             width: '55%',
             height: 3,
-            backgroundColor: '#E91E63',
+            backgroundColor: colors.primary,
             transform: [{ rotate: '25deg' }],
           }}
         />
 
-        {/* Pin A — Pickup (teal, label) */}
+        {/* Pin A — Pickup (teal) */}
         <View className="absolute top-[22%] left-[12%] items-center">
           <View className="w-8 h-8 rounded-full bg-primary border-2 border-white items-center justify-center">
-            <Text className="text-white text-[12px] font-gabarito">A</Text>
+            <Text className="text-white text-caption font-gabarito">A</Text>
           </View>
         </View>
 
-        {/* Pin B — Dropoff (orange, label) */}
+        {/* Pin B — Dropoff (orange) */}
         <View className="absolute top-[42%] left-[58%] items-center">
-          <View className="w-8 h-8 rounded-full bg-secondary border-2 border-white items-center justify-center">
-            <Text className="text-white text-[12px] font-gabarito">B</Text>
+          <View className="w-8 h-8 rounded-full bg-accent border-2 border-white items-center justify-center">
+            <Text className="text-white text-caption font-gabarito">B</Text>
           </View>
         </View>
 
-        {/* Secondary B pin (destination marker) */}
+        {/* Secondary B marker (destination) */}
         <View className="absolute top-[52%] left-[48%] items-center">
-          <View className="w-7 h-7 rounded-md bg-secondary items-center justify-center">
-            <Text className="text-white text-[11px] font-gabarito">B</Text>
+          <View className="w-7 h-7 rounded-md bg-accent items-center justify-center">
+            <Text className="text-white text-caption-sm font-gabarito">B</Text>
           </View>
         </View>
 
-        {/* Current location dot (teal, no label) */}
+        {/* Current location dot */}
         <View className="absolute top-[20%] left-[42%] items-center">
           <View className="w-4 h-4 rounded-full bg-primary border-2 border-white" />
         </View>
 
-        {/* Green destination marker (C) */}
+        {/* Pin C — green destination */}
         <View className="absolute top-[62%] left-[42%] items-center">
-          <View className="w-7 h-7 rounded-md bg-green-500 items-center justify-center">
-            <Text className="text-white text-[11px] font-gabarito">C</Text>
+          <View className="w-7 h-7 rounded-md bg-status-success items-center justify-center">
+            <Text className="text-white text-caption-sm font-gabarito">C</Text>
           </View>
         </View>
       </View>
 
-      {/* ═══ BOTTOM CARD ═══ */}
+      {/* ═══ BOTTOM SHEET ═══ */}
       <View
-        className="bg-white -mt-6 rounded-t-3xl px-6 pt-6 pb-8"
-        style={{ minHeight: height * 0.35 }}
+        className="bg-surface -mt-6 rounded-t-3xl px-6 pt-6 flex-1"
+        style={{
+          minHeight: height * 0.35,
+          paddingBottom: Math.max(insets.bottom, 24) + 8,
+        }}
       >
         {/* Drag handle */}
         <View className="w-10 h-1 bg-border-light rounded-full self-center mb-5" />
 
         {/* Title */}
-        <Text className="text-[18px] font-gabarito text-text-dark mb-1">
+        <Text className="text-title font-gabarito text-ink mb-1">
           Finding an Errand Runner...
         </Text>
 
         {/* Subtitle */}
-        <Text className="text-[12px] font-figtree text-text-gray mb-5">
+        <Text className="text-caption font-figtree text-muted mb-5">
           5 verified runners are available nearby.
         </Text>
 
@@ -138,20 +167,10 @@ export default function FindingRunner() {
           />
         </View>
 
-        {/* Cancel button */}
-        <TouchableOpacity
-          onPress={handleCancel}
-          className="rounded-2xl py-4 items-center"
-          style={{ backgroundColor: '#FEE2E2' }}
-          activeOpacity={0.85}
-        >
-          <Text
-            className="text-[14px] font-gabarito tracking-wider"
-            style={{ color: '#EF4444' }}
-          >
-            CANCEL REQUEST
-          </Text>
-        </TouchableOpacity>
+        {/* Cancel button — destructive variant */}
+        <Button variant="destructive" fullWidth onPress={handleCancel}>
+          Cancel Request
+        </Button>
       </View>
     </View>
   );

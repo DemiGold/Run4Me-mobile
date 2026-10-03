@@ -1,75 +1,136 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { colors } from '@/constants/colors';
 
-const services = [
-  { id: 'shop-for-me', name: 'Shop for Me', icon: 'shopping-bag', bg: '#E6F3F5', color: '#006B75' },
-  { id: 'pick-up-deliver', name: 'Pick Up & Deliver', icon: 'package', bg: '#FFF5E6', color: '#FF9F1C' },
-  { id: 'run-errand', name: 'Run an Errand', icon: 'clipboard', bg: '#E6F3F5', color: '#006B75' },
-  { id: 'pharmacy', name: 'Pharmacy', icon: 'activity', bg: '#FFF5E6', color: '#FF9F1C' },
-  { id: 'food-groceries', name: 'Food & Groceries', icon: 'coffee', bg: '#E6F3F5', color: '#006B75' },
-  { id: 'multiple-stops', name: 'Multiple Stops', icon: 'map-pin', bg: '#FFF5E6', color: '#FF9F1C' },
+// ─────────────────────────────────────────────────────────────
+// Customer Home
+//
+// Figma: customer-home
+//   Location pill · bell · greeting · promo banner ·
+//   services grid (2 rows of 3) · favorite stores · recent errand.
+//
+// Real-time greeting ticks every minute so it stays correct across
+// the noon / 5pm boundary while the app is open.
+// ─────────────────────────────────────────────────────────────
+
+type Service = {
+  id: string;
+  name: string;
+  icon: React.ComponentProps<typeof Feather>['name'];
+  tint: string;
+  color: string;
+};
+
+// Figma splits the grid into two rows (grid-row-1, grid-row-2).
+// Tint alternates teal / orange per the design.
+const SERVICE_ROWS: Service[][] = [
+  [
+    { id: 'shop-for-me',     name: 'Shop for Me',       icon: 'shopping-bag', tint: colors.primaryLight, color: colors.primary },
+    { id: 'pick-up-deliver', name: 'Pick Up & Deliver', icon: 'package',      tint: colors.accentLight,  color: colors.accent  },
+    { id: 'run-errand',      name: 'Run an Errand',     icon: 'clipboard',    tint: colors.primaryLight, color: colors.primary },
+  ],
+  [
+    { id: 'pharmacy',        name: 'Pharmacy',          icon: 'activity',     tint: colors.accentLight,  color: colors.accent  },
+    { id: 'food-groceries',  name: 'Food & Groceries',  icon: 'coffee',       tint: colors.primaryLight, color: colors.primary },
+    { id: 'multiple-stops',  name: 'Multiple Stops',    icon: 'map-pin',      tint: colors.accentLight,  color: colors.accent  },
+  ],
 ];
 
-const favoriteStores = [
-  { id: 1, name: 'Spar Lekki', subtitle: 'Supermarket' },
-  { id: 2, name: 'Medplus', subtitle: 'Pharmacy' },
+// ─── MOCK data — replace with real data when backend ships ───
+const FAVORITE_STORES = [
+  { id: 1, name: 'Spar Lekki', subtitle: 'Supermarket', icon: 'shopping-bag' as const },
+  { id: 2, name: 'Medplus',    subtitle: 'Pharmacy',    icon: 'activity'     as const },
 ];
+
+const RECENT_ERRAND = {
+  id: 'e-1',
+  title: 'Grocery Pickup from Spar',
+  meta: 'Delivered by Runner Tunde • ₦3,400',
+};
+
+// ─── Real-time greeting ───
+const getGreeting = (d: Date): string => {
+  const h = d.getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
+// Figma: drop shadow x=0 y=4 blur=12 spread=0 #000000 @ 3.14%
+const cardShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.0314,
+  shadowRadius: 12,
+  elevation: 2,
+};
 
 export default function CustomerHome() {
-  const [fontsLoaded] = useFonts({
-    Gabarito_800ExtraBold,
-    Figtree_500Medium,
-    Figtree_700Bold,
-  });
+  // Live clock — updates every minute so the greeting stays correct
+  const [now, setNow] = useState(() => new Date());
 
-  if (!fontsLoaded) return null;
+  useEffect(() => {
+    const tick = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(tick);
+  }, []);
 
-  const hour = new Date().getHours();
-  let greeting = 'Good afternoon';
-  if (hour < 12) greeting = 'Good morning';
-  else if (hour < 17) greeting = 'Good afternoon';
-  else greeting = 'Good evening';
+  const greeting = getGreeting(now);
+
+  const goToService = (serviceId: string) =>
+    router.push({
+      pathname: '/(customer)/errand/select-type',
+      params: { type: serviceId },
+    });
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <ScrollView showsVerticalScrollIndicator={false}>
-
-        {/* Header: location chip + bell */}
+    <SafeAreaView
+      className="flex-1 bg-surface"
+      edges={['top', 'left', 'right']}
+    >
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 }}
+      >
+        {/* ─── Top Row: location pill + bell ─── */}
         <View className="flex-row items-center justify-between px-6 pt-5 pb-5">
-          <TouchableOpacity className="flex-row items-center gap-1.5" activeOpacity={0.7}>
-            <Feather name="map-pin" size={14} color="#006B75" />
-            <Text className="text-[13px] font-figtree-bold text-text-dark">
+          <TouchableOpacity
+            className="flex-row items-center gap-1.5"
+            activeOpacity={0.7}
+            onPress={() => router.push('/(customer)/account/saved-addresses')}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+          >
+            <Feather name="map-pin" size={14} color={colors.primary} />
+            <Text className="text-body-xs font-figtree-bold text-ink">
               Lekki Phase 1, Lagos
             </Text>
-            <Feather name="chevron-down" size={14} color="#0F172A" />
+            <Feather name="chevron-down" size={14} color={colors.ink} />
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => router.push('/(customer)/notifications')}
             className="w-9 h-9 rounded-full border border-border items-center justify-center"
             activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Feather name="bell" size={16} color="#0F172A" />
+            <Feather name="bell" size={16} color={colors.ink} />
           </TouchableOpacity>
         </View>
 
-        {/* Greeting */}
+        {/* ─── Greeting ─── */}
         <View className="px-6 pb-5">
-          <Text className="text-[22px] font-gabarito text-text-dark">
+          <Text className="text-heading font-gabarito text-ink">
             {greeting} 👋
           </Text>
-          <Text className="text-[13px] font-figtree text-text-gray mt-1">
+          <Text className="text-body-xs font-figtree text-muted mt-1">
             What can we help you get done today?
           </Text>
         </View>
 
-        {/* Promo Banner */}
+        {/* ─── Promo Banner ─── */}
         <TouchableOpacity
           onPress={() =>
             router.push({
@@ -77,82 +138,88 @@ export default function CustomerHome() {
               params: { promo: 'FIRST4ME' },
             })
           }
-          className="mx-6 bg-primary rounded-2xl p-4 flex-row items-center"
+          className="mx-6 bg-primary rounded-2xl p-4 flex-row items-center gap-3"
           activeOpacity={0.9}
         >
-          <View className="flex-1 pr-3">
-            <Text className="text-white text-[15px] font-gabarito">
+          <View className="flex-1 gap-1.5">
+            <Text className="text-white text-body-sm font-gabarito">
               Get ₦1,000 Off First Errand
             </Text>
-            <Text className="text-white/80 text-[11px] font-figtree mt-1">
+            <Text className="text-white/80 text-caption font-figtree">
               Use code FIRST4ME at summary screen
             </Text>
           </View>
 
           <View className="w-11 h-11 rounded-xl bg-white/10 items-center justify-center">
-            <Feather name="gift" size={22} color="#FF9F1C" />
+            <Feather name="gift" size={22} color={colors.accent} />
           </View>
         </TouchableOpacity>
 
-        {/* Services */}
+        {/* ─── Errand Services ─── */}
         <View className="px-6 mt-6">
-          <Text className="text-[16px] font-gabarito text-text-dark mb-4">
+          <Text className="text-body font-gabarito text-ink mb-4">
             Our Errand Services
           </Text>
 
-          <View className="flex-row flex-wrap justify-between">
-            {services.map((service) => (
-              <TouchableOpacity
-                key={service.id}
-                className="w-[31%] bg-white border border-border rounded-2xl py-4 items-center mb-3"
-                activeOpacity={0.8}
-                onPress={() =>
-                  router.push({
-                    pathname: '/(customer)/errand/select-type',
-                    params: { type: service.id },
-                  })
-                }
-              >
-                <View
-                  className="w-11 h-11 rounded-xl items-center justify-center mb-2"
-                  style={{ backgroundColor: service.bg }}
-                >
-                  <Feather
-                    name={service.icon as any}
-                    size={20}
-                    color={service.color}
-                  />
-                </View>
-                <Text className="text-[11px] font-figtree-bold text-text-dark text-center px-1">
-                  {service.name}
-                </Text>
-              </TouchableOpacity>
+          <View className="gap-3">
+            {SERVICE_ROWS.map((row, rowIdx) => (
+              <View key={rowIdx} className="flex-row gap-3">
+                {row.map((service) => (
+                  <TouchableOpacity
+                    key={service.id}
+                    onPress={() => goToService(service.id)}
+                    activeOpacity={0.85}
+                    className="flex-1 bg-surface rounded-2xl p-3 items-center gap-2.5"
+                    style={cardShadow}
+                  >
+                    <View
+                      className="w-11 h-11 rounded-xl items-center justify-center"
+                      style={{ backgroundColor: service.tint }}
+                    >
+                      <Feather
+                        name={service.icon}
+                        size={20}
+                        color={service.color}
+                      />
+                    </View>
+                    <Text className="text-micro font-figtree-bold text-ink text-center">
+                      {service.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             ))}
           </View>
         </View>
 
-        {/* Favorite Stores */}
-        <View className="px-6 mt-4">
-          <Text className="text-[16px] font-gabarito text-text-dark mb-3">
+        {/* ─── Favorite Stores ─── */}
+        <View className="px-6 mt-6">
+          <Text className="text-body font-gabarito text-ink mb-3">
             Your Favorite Stores
           </Text>
 
           <View className="flex-row gap-3">
-            {favoriteStores.map((store) => (
+            {FAVORITE_STORES.map((store) => (
               <TouchableOpacity
                 key={store.id}
-                className="flex-1 flex-row items-center gap-2 border border-border rounded-2xl p-3 bg-white"
-                activeOpacity={0.8}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(customer)/errand/select-type',
+                    params: { type: 'shop-for-me', store: store.name },
+                  })
+                }
+                className="flex-1 flex-row items-center gap-2 border border-border rounded-2xl p-3 bg-surface"
+                activeOpacity={0.85}
               >
                 <View className="w-9 h-9 rounded-full bg-primary-light items-center justify-center">
-                  <Feather name="shopping-bag" size={16} color="#006B75" />
+                  <Feather name={store.icon} size={16} color={colors.primary} />
                 </View>
 
                 <View className="flex-1">
-                  <Text className="text-[12px] font-figtree-bold text-text-dark">
+                  <Text className="text-caption font-figtree-bold text-ink">
                     {store.name}
                   </Text>
-                  <Text className="text-[10px] font-figtree text-text-light">
+                  <Text className="text-micro font-figtree text-text-light mt-0.5">
                     {store.subtitle}
                   </Text>
                 </View>
@@ -161,29 +228,29 @@ export default function CustomerHome() {
           </View>
         </View>
 
-        {/* Recent Errands */}
-        <View className="px-6 mt-6 pb-8">
-          <Text className="text-[16px] font-gabarito text-text-dark mb-3">
+        {/* ─── Recent Errands ─── */}
+        <View className="px-6 mt-6">
+          <Text className="text-body font-gabarito text-ink mb-3">
             Recent Errands
           </Text>
 
           <TouchableOpacity
             onPress={() => router.push('/(customer)/activity')}
-            className="flex-row items-center gap-3 border border-border rounded-2xl p-4 bg-white"
-            activeOpacity={0.8}
+            className="flex-row items-center gap-3 border border-border rounded-2xl p-4 bg-surface"
+            activeOpacity={0.85}
           >
-            <View className="w-2 h-2 rounded-full bg-secondary mt-1" />
+            <View className="w-2 h-2 rounded-full bg-accent" />
 
             <View className="flex-1">
-              <Text className="text-[13px] font-figtree-bold text-text-dark">
-                Grocery Pickup from Spar
+              <Text className="text-body-xs font-figtree-bold text-ink">
+                {RECENT_ERRAND.title}
               </Text>
-              <Text className="text-[11px] font-figtree text-text-gray mt-0.5">
-                Delivered by Runner Tunde • ₦3,400
+              <Text className="text-micro font-figtree text-muted mt-0.5">
+                {RECENT_ERRAND.meta}
               </Text>
             </View>
 
-            <Feather name="chevron-right" size={18} color="#94A3B8" />
+            <Feather name="chevron-right" size={18} color={colors.subtle} />
           </TouchableOpacity>
         </View>
 

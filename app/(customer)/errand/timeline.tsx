@@ -4,50 +4,61 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { Button } from '@/components/ui/Button';
+import { colors } from '@/constants/colors';
+
+// ─────────────────────────────────────────────────────────────
+// Delivery Preference (timeline) — step 7 of 8
+//
+// Figma: Delivery Preference
+//   Deliver Now (teal) · Schedule for Later (orange) with
+//   date/time pills.
+//
+// IMPORTANT: all wizard params accumulate forward. `items` is
+// forwarded from items.tsx via budget/instructions; forgetting it
+// here silently drops it before the runner-matching phase.
+//
+// After this screen: finding-runner (matching) → available-runners
+// → runner-secured → payment/checkout → pay → errand-confirmed.
+// ─────────────────────────────────────────────────────────────
 
 type Timeline = 'now' | 'later';
 
 export default function DeliveryPreference() {
-  const {
-    type,
-    promo,
-    pickup,
-    dropoff,
-    budget,
-    instructions,
-  } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     type?: string;
     promo?: string;
+    store?: string;
     pickup?: string;
     dropoff?: string;
+    items?: string;
     budget?: string;
     instructions?: string;
+    photoCount?: string;
+    timeline?: string;
+    scheduledDate?: string;
+    scheduledTime?: string;
   }>();
 
-  const [selected, setSelected] = useState<Timeline>('later');
-  const [date] = useState('Oct 26, 2026');
-  const [time] = useState('2:00 PM');
-
-  const [fontsLoaded] = useFonts({
-    Gabarito_800ExtraBold,
-    Figtree_500Medium,
-    Figtree_700Bold,
-  });
-
-  if (!fontsLoaded) return null;
+  const [selected, setSelected] = useState<Timeline>(
+    (params.timeline as Timeline) ?? 'later'
+  );
+  const [date] = useState(params.scheduledDate ?? 'Oct 26, 2026');
+  const [time] = useState(params.scheduledTime ?? '2:00 PM');
 
   const handleContinue = () => {
     router.push({
-      pathname: '/(customer)/errand/checkout',
+      pathname: '/(customer)/errand/finding-runner',
       params: {
-        type: type ?? '',
-        promo: promo ?? '',
-        pickup: pickup ?? '',
-        dropoff: dropoff ?? '',
-        budget: budget ?? '',
-        instructions: instructions ?? '',
+        type: params.type ?? '',
+        promo: params.promo ?? '',
+        store: params.store ?? '',
+        pickup: params.pickup ?? '',
+        dropoff: params.dropoff ?? '',
+        items: params.items ?? '',   // ← forward the shopping list
+        budget: params.budget ?? '',
+        instructions: params.instructions ?? '',
+        photoCount: params.photoCount ?? '0',
         timeline: selected,
         scheduledDate: selected === 'later' ? date : '',
         scheduledTime: selected === 'later' ? time : '',
@@ -56,128 +67,125 @@ export default function DeliveryPreference() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
       {/* Header */}
       <View className="flex-row items-center justify-between px-6 pt-4 pb-4">
         <TouchableOpacity
           onPress={() => router.back()}
           className="w-9 h-9 rounded-full border border-border items-center justify-center"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Feather name="arrow-left" size={18} color="#0F172A" />
+          <Feather name="arrow-left" size={18} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-[15px] font-gabarito text-text-dark">
+        <Text className="text-body font-gabarito text-ink">
           Delivery Preference
         </Text>
 
-        <Text className="text-[13px] font-figtree-bold text-primary">
-          7<Text className="text-text-light font-figtree font-normal">/8</Text>
+        <Text className="text-body-xs font-figtree-bold text-primary">
+          7<Text className="text-text-light font-figtree">/8</Text>
         </Text>
       </View>
 
       <View className="flex-1 px-6">
         {/* Title */}
-        <Text className="text-[20px] font-gabarito text-text-dark mb-2 mt-2">
+        <Text className="text-heading-sm font-gabarito text-ink mb-2 mt-2">
           Choose your timeline
         </Text>
 
-        <Text className="text-[13px] font-figtree text-text-gray leading-5 mb-6">
+        <Text className="text-body-xs font-figtree text-muted mb-6">
           When do you want your Errand Runner to execute this task?
         </Text>
 
-        {/* Option 1: Deliver Now */}
+        {/* Deliver Now */}
         <TouchableOpacity
           onPress={() => setSelected('now')}
           activeOpacity={0.8}
-          className={`rounded-2xl p-4 flex-row items-center gap-3 mb-3 ${
-            selected === 'now'
+          className={`
+            rounded-2xl p-4 flex-row items-center gap-3 mb-3
+            ${selected === 'now'
               ? 'border-2 border-primary bg-primary-light'
-              : 'border border-border bg-white'
-          }`}
+              : 'border border-border bg-surface'
+            }
+          `}
         >
           <View className="w-10 h-10 rounded-xl bg-primary-light items-center justify-center">
-            <Feather name="zap" size={18} color="#006B75" />
+            <Feather name="zap" size={18} color={colors.primary} />
           </View>
 
           <View className="flex-1">
-            <Text className="text-[14px] font-gabarito text-text-dark">
+            <Text className="text-body-sm font-gabarito-bold text-ink">
               Deliver Now
             </Text>
-            <Text className="text-[11px] font-figtree text-text-gray mt-0.5">
+            <Text className="text-caption-sm font-figtree text-muted mt-0.5">
               Instantly assign to the closest runner
             </Text>
           </View>
 
-          {/* Radio/Check indicator */}
           {selected === 'now' ? (
-            <Feather name="check-circle" size={22} color="#006B75" />
+            <Feather name="check-circle" size={22} color={colors.primary} />
           ) : (
             <View className="w-5 h-5 rounded-full border-2 border-border-light" />
           )}
         </TouchableOpacity>
 
-        {/* Option 2: Schedule for Later */}
+        {/* Schedule for Later */}
         <TouchableOpacity
           onPress={() => setSelected('later')}
           activeOpacity={0.8}
-          className={`rounded-2xl p-4 mb-3 ${
-            selected === 'later'
+          className={`
+            rounded-2xl p-4 mb-3
+            ${selected === 'later'
               ? 'border-2 border-primary bg-primary-light'
-              : 'border border-border bg-white'
-          }`}
+              : 'border border-border bg-surface'
+            }
+          `}
         >
           <View className="flex-row items-center gap-3">
-            <View className="w-10 h-10 rounded-xl bg-secondary-light items-center justify-center">
-              <Feather name="calendar" size={18} color="#FF9F1C" />
+            <View className="w-10 h-10 rounded-xl bg-accent-light items-center justify-center">
+              <Feather name="calendar" size={18} color={colors.accent} />
             </View>
 
             <View className="flex-1">
-              <Text className="text-[14px] font-gabarito text-text-dark">
+              <Text className="text-body-sm font-gabarito-bold text-ink">
                 Schedule for Later
               </Text>
-              <Text className="text-[11px] font-figtree text-text-gray mt-0.5">
+              <Text className="text-caption-sm font-figtree text-muted mt-0.5">
                 Choose a convenient time window
               </Text>
             </View>
 
             {selected === 'later' ? (
-              <Feather name="check-circle" size={22} color="#006B75" />
+              <Feather name="check-circle" size={22} color={colors.primary} />
             ) : (
               <View className="w-5 h-5 rounded-full border-2 border-border-light" />
             )}
           </View>
 
-          {/* Date + Time pills (only shown when Schedule is selected) */}
-          {selected === 'later' && (
+          {selected === 'later' ? (
             <View className="flex-row gap-3 mt-4">
-              <View className="flex-1 bg-white border border-border rounded-xl px-3 py-2.5 flex-row items-center gap-2">
-                <Feather name="calendar" size={14} color="#475569" />
-                <Text className="text-[12px] font-figtree text-text-dark">
+              <View className="flex-1 bg-surface border border-border rounded-xl px-3 py-2.5 flex-row items-center gap-2">
+                <Feather name="calendar" size={14} color={colors.muted} />
+                <Text className="text-caption font-figtree text-ink">
                   {date}
                 </Text>
               </View>
-              <View className="flex-1 bg-white border border-border rounded-xl px-3 py-2.5 flex-row items-center gap-2">
-                <Feather name="clock" size={14} color="#475569" />
-                <Text className="text-[12px] font-figtree text-text-dark">
+              <View className="flex-1 bg-surface border border-border rounded-xl px-3 py-2.5 flex-row items-center gap-2">
+                <Feather name="clock" size={14} color={colors.muted} />
+                <Text className="text-caption font-figtree text-ink">
                   {time}
                 </Text>
               </View>
             </View>
-          )}
+          ) : null}
         </TouchableOpacity>
       </View>
 
-      {/* Bottom CTA */}
-      <View className="px-6 pb-6 pt-3 bg-white">
-        <TouchableOpacity
-          onPress={handleContinue}
-          className="bg-primary rounded-2xl py-4 items-center"
-          activeOpacity={0.85}
-        >
-          <Text className="text-white text-[14px] font-gabarito tracking-wider">
-            CONTINUE
-          </Text>
-        </TouchableOpacity>
+      {/* CTA */}
+      <View className="px-6 pb-6 pt-3">
+        <Button variant="primary" fullWidth onPress={handleContinue}>
+          Continue
+        </Button>
       </View>
     </SafeAreaView>
   );

@@ -54,8 +54,9 @@ export default function CashAmount() {
       router.push({
         pathname: '/(customer)/errand/payment/cash-review',
         params: {
-          errandId: params.errandId ?? '',
+          ...params,
           amount: String(numericAmount),
+          paymentMethod: 'cash',
         },
       });
     } finally {

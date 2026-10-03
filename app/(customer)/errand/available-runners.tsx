@@ -11,8 +11,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { Button } from '@/components/ui/Button';
+import { colors } from '@/constants/colors';
+
+// ─────────────────────────────────────────────────────────────
+// Available Runners
+//
+// Shown after finding-runner. Customer picks a runner from the
+// list, then routes to runner-secured with the choice.
+//
+// Figma: available-runners
+//   Map strip (30% height) · runner cards with price + ETA +
+//   Decline / Accept buttons.
+//
+// MOCK: AVAILABLE_RUNNERS below. Replace with
+// GET /errands/:id/runners.
+// ─────────────────────────────────────────────────────────────
 
 const { height } = Dimensions.get('window');
 const MAP_HEIGHT = height * 0.30;
@@ -68,6 +82,7 @@ export default function AvailableRunners() {
     promo?: string;
     pickup?: string;
     dropoff?: string;
+    items?: string;
     budget?: string;
     instructions?: string;
     timeline?: string;
@@ -76,14 +91,6 @@ export default function AvailableRunners() {
   }>();
 
   const [runners, setRunners] = useState<Runner[]>(AVAILABLE_RUNNERS);
-
-  const [fontsLoaded] = useFonts({
-    Gabarito_800ExtraBold,
-    Figtree_500Medium,
-    Figtree_700Bold,
-  });
-
-  if (!fontsLoaded) return null;
 
   const handleDecline = (id: string) => {
     setRunners((prev) => prev.filter((r) => r.id !== id));
@@ -106,11 +113,12 @@ export default function AvailableRunners() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background-subtle" edges={['top']}>
-      {/* MAP STRIP */}
+    <SafeAreaView className="flex-1 bg-background-subtle" edges={['top', 'left', 'right']}>
+      {/* ─── Map strip ─── */}
       <View className="w-full" style={{ height: MAP_HEIGHT }}>
         <Image source={MAP_IMAGE} className="w-full h-full" resizeMode="cover" />
 
+        {/* Route line */}
         <View
           className="absolute rounded-full"
           style={{
@@ -118,26 +126,29 @@ export default function AvailableRunners() {
             left: '32%',
             width: '38%',
             height: 3,
-            backgroundColor: '#4CAF50',
+            backgroundColor: colors.success,
             transform: [{ rotate: '18deg' }],
           }}
         />
 
+        {/* Pickup pin */}
         <View className="absolute top-[48%] left-[30%]">
           <View className="w-7 h-7 rounded-full bg-primary border-2 border-white items-center justify-center">
-            <Feather name="shopping-bag" size={12} color="#FFFFFF" />
+            <Feather name="shopping-bag" size={12} color={colors.white} />
           </View>
         </View>
 
+        {/* Dropoff pin */}
         <View className="absolute top-[32%] left-[62%]">
-          <View className="w-7 h-7 rounded-full bg-secondary border-2 border-white items-center justify-center">
-            <Feather name="home" size={12} color="#FFFFFF" />
+          <View className="w-7 h-7 rounded-full bg-accent border-2 border-white items-center justify-center">
+            <Feather name="home" size={12} color={colors.white} />
           </View>
         </View>
       </View>
 
-      {/* BOTTOM SHEET */}
-      <View className="flex-1 bg-white -mt-6 rounded-t-3xl pt-4">
+      {/* ─── Bottom sheet ─── */}
+      <View className="flex-1 bg-surface -mt-6 rounded-t-3xl pt-4">
+        {/* Drag handle */}
         <View className="w-10 h-1 bg-border-light rounded-full self-center mb-5" />
 
         <ScrollView
@@ -146,19 +157,19 @@ export default function AvailableRunners() {
           showsVerticalScrollIndicator={false}
         >
           <View className="px-6">
-            <Text className="text-[20px] font-gabarito text-text-dark mb-1">
+            <Text className="text-title font-gabarito text-ink mb-1">
               Available runners
             </Text>
 
-            <Text className="text-[12px] font-figtree text-text-gray mb-5">
+            <Text className="text-caption font-figtree text-muted mb-5">
               Choose a verified runner for your errand.
             </Text>
 
             <View className="gap-3">
               {runners.length === 0 ? (
                 <View className="items-center py-16">
-                  <Feather name="users" size={40} color="#94A3B8" />
-                  <Text className="text-[13px] font-figtree text-text-light mt-3">
+                  <Feather name="users" size={40} color={colors.subtle} />
+                  <Text className="text-body-xs font-figtree text-text-light mt-3">
                     No runners available right now
                   </Text>
                 </View>
@@ -166,59 +177,59 @@ export default function AvailableRunners() {
                 runners.map((runner) => (
                   <View
                     key={runner.id}
-                    className="border border-border rounded-2xl p-4 bg-white"
+                    className="border border-border rounded-2xl p-4 bg-surface"
                   >
+                    {/* Top row: avatar + name + verified badge */}
                     <View className="flex-row items-start gap-3 mb-4">
-                      <View className="w-12 h-12 rounded-full bg-slate-200 items-center justify-center overflow-hidden">
-                        <Feather name="user" size={22} color="#94A3B8" />
+                      <View className="w-12 h-12 rounded-full bg-background-dark items-center justify-center overflow-hidden">
+                        <Feather name="user" size={22} color={colors.subtle} />
                       </View>
 
                       <View className="flex-1">
                         <View className="flex-row items-center gap-1.5 mb-1">
-                          <Text className="text-[14px] font-gabarito text-text-dark">
+                          <Text className="text-body-sm font-gabarito-bold text-ink">
                             {runner.name}
                           </Text>
-                          <View className="w-4 h-4 rounded-full bg-green-500 items-center justify-center">
-                            <Feather name="check" size={10} color="#FFFFFF" />
+                          <View className="w-4 h-4 rounded-full bg-status-success items-center justify-center">
+                            <Feather name="check" size={10} color={colors.white} />
                           </View>
                         </View>
 
-                        <Text className="text-[11px] font-figtree text-text-gray">
+                        <Text className="text-caption-sm font-figtree text-muted">
                           ⭐ {runner.rating} · Verified runner
                         </Text>
                       </View>
                     </View>
 
+                    {/* Price + ETA */}
                     <View className="mb-4">
-                      <Text className="text-[16px] font-gabarito text-primary mb-1">
+                      <Text className="text-body font-gabarito-bold text-primary mb-1">
                         {runner.price}
                       </Text>
-                      <Text className="text-[11px] font-figtree text-text-gray">
+                      <Text className="text-caption-sm font-figtree text-muted">
                         Pickup in {runner.pickupMins} min · Shopping location in{' '}
                         {runner.shoppingMins} min
                       </Text>
                     </View>
 
+                    {/* Actions */}
                     <View className="gap-2">
-                      <TouchableOpacity
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        fullWidth
                         onPress={() => handleDecline(runner.id)}
-                        className="border border-border rounded-xl py-3 items-center"
-                        activeOpacity={0.75}
                       >
-                        <Text className="text-[13px] font-figtree-bold text-text-dark">
-                          Decline
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
+                        Decline
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        fullWidth
                         onPress={() => handleAccept(runner)}
-                        className="bg-primary rounded-xl py-3 items-center"
-                        activeOpacity={0.85}
                       >
-                        <Text className="text-[13px] font-figtree-bold text-white">
-                          Accept
-                        </Text>
-                      </TouchableOpacity>
+                        Accept
+                      </Button>
                     </View>
                   </View>
                 ))

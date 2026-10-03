@@ -6,13 +6,28 @@ import {
   Image,
   Dimensions,
   ScrollView,
+  Linking,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { colors } from '@/constants/colors';
+
+// ─────────────────────────────────────────────────────────────
+// Live Tracking
+//
+// Map + progress stepper + runner card. The runner card's actions
+// (chat / call / SOS) are wired here.
+//
+// Figma: live-tracking
+//   Map at 52% height, floating header pill, bottom sheet with
+//   stepper + runner card.
+//
+// MOCK: currentStep is static. Real implementation will poll
+// GET /errands/:id/tracking and update the step + ETA.
+// ─────────────────────────────────────────────────────────────
 
 const { height } = Dimensions.get('window');
 const MAP_HEIGHT = height * 0.52;
@@ -28,47 +43,85 @@ const STEPS = [
   'Runner is here',
 ];
 
+// ─── MOCK runner — replace with real data from tracking endpoint ───
+const MOCK_RUNNER = {
+  name: 'David',
+  rating: 4.9,
+  role: 'Delivery Agent',
+  phone: '+2348000000000',
+};
+
 export default function LiveTracking() {
   const insets = useSafeAreaInsets();
+
   const params = useLocalSearchParams<{
     id?: string;
     type?: string;
     pickup?: string;
     dropoff?: string;
     budget?: string;
+    items?: string;
   }>();
 
-  // Current progress: step 2 (Heading to Store) active
+  // MOCK: step 2 (Heading to Store) active
   const [currentStep] = useState(1);
 
-  const [fontsLoaded] = useFonts({
-    Gabarito_800ExtraBold,
-    Figtree_500Medium,
-    Figtree_700Bold,
-  });
+  // ─── Actions ───
+  const handleChat = () => {
+    router.push({
+      pathname: '/(customer)/errand/chat',
+      params: {
+        errandId: params.id ?? '',
+        runnerName: MOCK_RUNNER.name,
+      },
+    });
+  };
 
-  if (!fontsLoaded) return null;
+  const handleCall = () => {
+    Linking.openURL(`tel:${MOCK_RUNNER.phone}`).catch(() => {
+      Alert.alert('Cannot place call', 'Your device does not support calling.');
+    });
+  };
+
+  const handleSos = () => {
+    Alert.alert(
+      'Emergency Support',
+      'This will contact Run4Me support and share your live location. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Contact Support',
+          style: 'destructive',
+          onPress: () => {
+            // ─── MOCK: wire to real support hotline when available ───
+            Linking.openURL('tel:+2348000000000');
+          },
+        },
+      ]
+    );
+  };
 
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-surface">
+
       {/* ═══ TOP HEADER — floats over map ═══ */}
       <View
         className="absolute z-10 left-0 right-0 px-5"
         style={{ top: insets.top + 8 }}
       >
-        <Text className="text-[10px] font-figtree-bold text-primary tracking-widest mb-2 pl-1">
+        <Text className="text-micro font-figtree-bold text-primary tracking-widest mb-2 pl-1">
           LEKKI, LAGOS, NIGERIA
         </Text>
 
-        <View className="bg-white rounded-full px-3 py-2.5 flex-row items-center gap-3 shadow-md">
-          <View className="w-2 h-2 rounded-full bg-green-500" />
+        <View className="bg-surface rounded-full px-3 py-2.5 flex-row items-center gap-3 shadow-md">
+          <View className="w-2 h-2 rounded-full bg-status-success" />
 
-          <Text className="flex-1 text-[13px] font-figtree-bold text-text-dark">
-            David is heading to the store
+          <Text className="flex-1 text-body-xs font-figtree-bold text-ink">
+            {MOCK_RUNNER.name} is heading to the store
           </Text>
 
-          <View className="bg-secondary-light rounded-full px-2.5 py-1">
-            <Text className="text-[10px] font-figtree-bold text-secondary">
+          <View className="bg-accent-light rounded-full px-2.5 py-1">
+            <Text className="text-micro font-figtree-bold text-accent">
               18 Mins Left
             </Text>
           </View>
@@ -79,33 +132,35 @@ export default function LiveTracking() {
       <View className="w-full" style={{ height: MAP_HEIGHT }}>
         <Image source={MAP_IMAGE} className="w-full h-full" resizeMode="cover" />
 
+        {/* Path line */}
         <View
-          className="absolute rounded-full"
+          className="absolute rounded-full bg-primary"
           style={{
             top: '40%',
             left: '30%',
             width: '45%',
             height: 3,
-            backgroundColor: '#006B75',
             transform: [{ rotate: '20deg' }],
           }}
         />
 
+        {/* Runner marker */}
         <View className="absolute top-[52%] left-[38%]">
           <View className="w-9 h-9 rounded-full bg-primary border-2 border-white items-center justify-center">
-            <Feather name="navigation" size={16} color="#FFFFFF" />
+            <Feather name="navigation" size={16} color={colors.white} />
           </View>
         </View>
 
+        {/* Destination marker */}
         <View className="absolute top-[32%] left-[62%]">
-          <View className="w-9 h-9 rounded-full bg-secondary border-2 border-white items-center justify-center">
-            <Feather name="map-pin" size={16} color="#FFFFFF" />
+          <View className="w-9 h-9 rounded-full bg-accent border-2 border-white items-center justify-center">
+            <Feather name="map-pin" size={16} color={colors.white} />
           </View>
         </View>
       </View>
 
       {/* ═══ BOTTOM SHEET ═══ */}
-      <View className="flex-1 bg-white -mt-6 rounded-t-3xl pt-3">
+      <View className="flex-1 bg-surface -mt-6 rounded-t-3xl pt-3">
         <View className="w-10 h-1 bg-border-light rounded-full self-center mb-5" />
 
         <ScrollView
@@ -121,27 +176,31 @@ export default function LiveTracking() {
               return (
                 <View key={step} className="flex-row items-center gap-3 mb-3">
                   <View
-                    className={`w-5 h-5 rounded-full items-center justify-center ${
-                      isDone
+                    className={`
+                      w-5 h-5 rounded-full items-center justify-center
+                      ${isDone
                         ? 'bg-primary'
                         : isCurrent
-                        ? 'bg-white border-2 border-primary'
-                        : 'bg-white border-2 border-border-light'
-                    }`}
+                        ? 'bg-surface border-2 border-primary'
+                        : 'bg-surface border-2 border-border-light'
+                      }
+                    `}
                   >
                     {isDone ? (
-                      <Feather name="check" size={11} color="#FFFFFF" />
+                      <Feather name="check" size={11} color={colors.white} />
                     ) : isCurrent ? (
                       <View className="w-2 h-2 rounded-full bg-primary" />
                     ) : null}
                   </View>
 
                   <Text
-                    className={`text-[13px] ${
-                      isDone || isCurrent
-                        ? 'font-figtree-bold text-text-dark'
+                    className={`
+                      text-body-xs
+                      ${isDone || isCurrent
+                        ? 'font-figtree-bold text-ink'
                         : 'font-figtree text-text-light'
-                    }`}
+                      }
+                    `}
                   >
                     {step}
                   </Text>
@@ -156,45 +215,51 @@ export default function LiveTracking() {
           <View className="flex-row items-center gap-3">
             <View
               className="w-11 h-11 rounded-full items-center justify-center"
-              style={{ borderWidth: 2, borderColor: '#006B75' }}
+              style={{ borderWidth: 2, borderColor: colors.primary }}
             >
-              <View className="w-full h-full rounded-full bg-slate-200 items-center justify-center overflow-hidden">
-                <Feather name="user" size={20} color="#94A3B8" />
+              <View className="w-full h-full rounded-full bg-background-dark items-center justify-center overflow-hidden">
+                <Feather name="user" size={20} color={colors.subtle} />
               </View>
             </View>
 
             <View className="flex-1">
-              <Text className="text-[14px] font-gabarito text-text-dark">
-                David
+              <Text className="text-body-sm font-gabarito-bold text-ink">
+                {MOCK_RUNNER.name}
               </Text>
-              <Text className="text-[11px] font-figtree text-text-gray">
-                ⭐ 4.9 · Delivery Agent
+              <Text className="text-caption-sm font-figtree text-muted">
+                ⭐ {MOCK_RUNNER.rating} · {MOCK_RUNNER.role}
               </Text>
             </View>
 
             <View className="flex-row items-center gap-2">
               {/* Chat */}
               <TouchableOpacity
+                onPress={handleChat}
                 className="w-10 h-10 rounded-full bg-primary-light items-center justify-center"
                 activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
-                <Feather name="message-circle" size={18} color="#006B75" />
+                <Feather name="message-circle" size={18} color={colors.primary} />
               </TouchableOpacity>
 
               {/* Call */}
               <TouchableOpacity
+                onPress={handleCall}
                 className="w-10 h-10 rounded-full bg-primary-light items-center justify-center"
                 activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
-                <Feather name="phone" size={18} color="#006B75" />
+                <Feather name="phone" size={18} color={colors.primary} />
               </TouchableOpacity>
 
               {/* SOS */}
               <TouchableOpacity
+                onPress={handleSos}
                 className="w-10 h-10 rounded-full bg-status-errorLight items-center justify-center"
                 activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
-                <Feather name="shield" size={18} color="#EF4444" />
+                <Feather name="shield" size={18} color={colors.danger} />
               </TouchableOpacity>
             </View>
           </View>
@@ -202,7 +267,8 @@ export default function LiveTracking() {
       </View>
 
       {/* ═══ DEV-ONLY: Advance to next stage ═══ */}
-      {/* TODO: Remove this once real WebSocket updates are wired */}
+      {/* TODO: Remove before shipping. Real app updates this via
+          WebSocket events from the runner's device. */}
       <TouchableOpacity
         onPress={() =>
           router.replace({
@@ -210,12 +276,12 @@ export default function LiveTracking() {
             params,
           })
         }
-        className="absolute right-5 rounded-full bg-secondary px-4 py-3 flex-row items-center gap-2"
+        className="absolute right-5 rounded-full bg-accent px-4 py-3 flex-row items-center gap-2"
         style={{ bottom: 90 }}
         activeOpacity={0.85}
       >
-        <Feather name="skip-forward" size={14} color="#FFFFFF" />
-        <Text className="text-[11px] font-gabarito text-white tracking-wider">
+        <Feather name="skip-forward" size={14} color={colors.white} />
+        <Text className="text-caption font-gabarito text-white tracking-wider">
           DEV: Next Stage
         </Text>
       </TouchableOpacity>

@@ -10,8 +10,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { Button } from '@/components/ui/Button';
+import { colors } from '@/constants/colors';
+
+// ─────────────────────────────────────────────────────────────
+// Shopping Progress
+//
+// Live shopping checklist while the runner is at the store.
+// Shows found/unavailable/pending items + a substitution card
+// when an item needs a decision.
+//
+// Figma: shopping-progress
+//   Checklist card · substitution card with approve / choose
+//   another / skip actions.
+//
+// MOCK: CHECKLIST below. Replace with GET /errands/:id/items.
+// ─────────────────────────────────────────────────────────────
 
 type ItemStatus = 'done' | 'unavailable' | 'pending';
 
@@ -23,28 +37,31 @@ type ChecklistItem = {
 };
 
 const CHECKLIST: ChecklistItem[] = [
-  { id: '1', name: 'Golden Penny Pasta x2', price: '₦1,200', status: 'done' },
-  { id: '2', name: 'Eva Table Water Case', price: '₦2,500', status: 'done' },
-  { id: '3', name: 'Peak Milk Powder 400g', price: 'Unavailable', status: 'unavailable' },
-  { id: '4', name: 'Kellogg Cornflakes Large', price: 'Pending', status: 'pending' },
+  { id: '1', name: 'Golden Penny Pasta x2',   price: '₦1,200',      status: 'done' },
+  { id: '2', name: 'Eva Table Water Case',    price: '₦2,500',      status: 'done' },
+  { id: '3', name: 'Peak Milk Powder 400g',   price: 'Unavailable', status: 'unavailable' },
+  { id: '4', name: 'Kellogg Cornflakes Large', price: 'Pending',    status: 'pending' },
 ];
 
-const PRODUCT_IMAGE = require('@/assets/map.png'); // swap for product img later
+// ─── MOCK: swap for product image from API later ───
+const PRODUCT_IMAGE = require('@/assets/map.png');
 
 export default function ShoppingProgress() {
   const params = useLocalSearchParams<{
     id?: string;
     pickup?: string;
     dropoff?: string;
+    runnerName?: string;
   }>();
 
-  const [fontsLoaded] = useFonts({
-    Gabarito_800ExtraBold,
-    Figtree_500Medium,
-    Figtree_700Bold,
-  });
+  const runnerName = params.runnerName ?? 'David';
 
-  if (!fontsLoaded) return null;
+  // ─── Status → circle styling ───
+  const STATUS_STYLES: Record<ItemStatus, string> = {
+    done: 'bg-status-successLight',
+    unavailable: 'bg-status-errorLight',
+    pending: 'bg-background-dark',
+  };
 
   const handleApprove = () => {
     router.replace({
@@ -53,18 +70,31 @@ export default function ShoppingProgress() {
     });
   };
 
+  const handleChooseAnother = () => {
+    // ─── MOCK: opens a product search sheet in a future session ───
+  };
+
+  const handleSkip = () => {
+    // ─── MOCK: marks item as skipped and returns to checklist ───
+    router.replace({
+      pathname: '/(customer)/errand/receipt',
+      params,
+    });
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
       {/* Header */}
       <View className="flex-row items-center justify-between px-6 pt-4 pb-4">
         <TouchableOpacity
           onPress={() => router.back()}
           className="w-9 h-9 rounded-full border border-border items-center justify-center"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Feather name="arrow-left" size={18} color="#0F172A" />
+          <Feather name="arrow-left" size={18} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-[15px] font-gabarito text-text-dark">
+        <Text className="text-body font-gabarito text-ink">
           Shopping Progress
         </Text>
 
@@ -79,59 +109,59 @@ export default function ShoppingProgress() {
         <View className="px-6">
           {/* Title row */}
           <View className="flex-row items-center justify-between mb-4 mt-1">
-            <Text className="text-[18px] font-gabarito text-text-dark">
+            <Text className="text-title font-gabarito text-ink">
               Lekki Spar Checklist
             </Text>
-            <Text className="text-[13px] font-figtree-bold text-primary">
+            <Text className="text-body-xs font-figtree-bold text-primary">
               3 of 5 Items
             </Text>
           </View>
 
           {/* Checklist card */}
-          <View className="border border-border rounded-2xl p-4 bg-white mb-5">
+          <View className="border border-border rounded-2xl p-4 bg-surface mb-5">
             {CHECKLIST.map((item, index) => {
               const isLast = index === CHECKLIST.length - 1;
 
               return (
                 <View
                   key={item.id}
-                  className={`flex-row items-center gap-3 py-3 ${
-                    !isLast ? 'border-b border-border' : ''
-                  }`}
+                  className={`
+                    flex-row items-center gap-3 py-3
+                    ${!isLast ? 'border-b border-border' : ''}
+                  `}
                 >
                   {/* Status circle */}
                   <View
-                    className={`w-6 h-6 rounded-full items-center justify-center ${
-                      item.status === 'done'
-                        ? 'bg-green-100'
-                        : item.status === 'unavailable'
-                        ? 'bg-status-errorLight'
-                        : 'bg-background-dark'
-                    }`}
+                    className={`
+                      w-6 h-6 rounded-full items-center justify-center
+                      ${STATUS_STYLES[item.status]}
+                    `}
                   >
                     {item.status === 'done' ? (
-                      <Feather name="check" size={13} color="#22C55E" />
+                      <Feather name="check" size={13} color={colors.success} />
                     ) : item.status === 'unavailable' ? (
-                      <Feather name="x" size={13} color="#EF4444" />
+                      <Feather name="x" size={13} color={colors.danger} />
                     ) : (
                       <View className="w-2 h-2 rounded-full bg-text-light" />
                     )}
                   </View>
 
                   {/* Item name */}
-                  <Text className="flex-1 text-[14px] font-figtree text-text-dark">
+                  <Text className="flex-1 text-body-sm font-figtree text-ink">
                     {item.name}
                   </Text>
 
                   {/* Price / status */}
                   <Text
-                    className={`text-[13px] font-figtree ${
-                      item.status === 'done'
-                        ? 'text-text-dark'
+                    className={`
+                      text-body-xs font-figtree
+                      ${item.status === 'done'
+                        ? 'text-ink'
                         : item.status === 'unavailable'
                         ? 'text-status-error'
                         : 'text-text-light'
-                    }`}
+                      }
+                    `}
                   >
                     {item.price}
                   </Text>
@@ -140,25 +170,25 @@ export default function ShoppingProgress() {
             })}
           </View>
 
-          {/* Substitution card — orange border */}
-          <View className="border-2 border-secondary rounded-2xl p-4 bg-white">
+          {/* Substitution card */}
+          <View className="border-2 border-accent rounded-2xl p-4 bg-surface">
             {/* Title row */}
             <View className="flex-row items-center gap-2 mb-2">
-              <Feather name="alert-circle" size={16} color="#FF9F1C" />
-              <Text className="text-[14px] font-gabarito text-text-dark">
+              <Feather name="alert-circle" size={16} color={colors.accent} />
+              <Text className="text-body-sm font-gabarito-bold text-ink">
                 Your item is unavailable.
               </Text>
             </View>
 
             {/* Description */}
-            <Text className="text-[12px] font-figtree text-text-gray leading-[18px] mb-4">
-              Peak Milk Powder 400g is out of stock. David suggests this
+            <Text className="text-caption font-figtree text-muted mb-4">
+              Peak Milk Powder 400g is out of stock. {runnerName} suggests this
               alternative:
             </Text>
 
             {/* Suggested product row */}
             <View className="flex-row items-center gap-3 mb-5">
-              <View className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden">
+              <View className="w-14 h-14 rounded-xl bg-background-dark overflow-hidden">
                 <Image
                   source={PRODUCT_IMAGE}
                   className="w-full h-full"
@@ -167,46 +197,47 @@ export default function ShoppingProgress() {
               </View>
 
               <View className="flex-1">
-                <Text className="text-[13px] font-gabarito text-text-dark mb-0.5">
+                <Text className="text-body-xs font-gabarito-bold text-ink mb-0.5">
                   Lano Milk Powder 400g
                 </Text>
-                <Text className="text-[12px] font-figtree-bold" style={{ color: '#22C55E' }}>
+                <Text className="text-caption font-figtree-bold text-status-success">
                   ₦2,100 (Saves ₦300)
                 </Text>
               </View>
             </View>
 
-            {/* Approve Alternative CTA */}
-            <TouchableOpacity
+            {/* Approve Alternative */}
+            <Button
+              variant="primary"
+              fullWidth
               onPress={handleApprove}
-              className="bg-primary rounded-xl py-3.5 items-center mb-3"
-              activeOpacity={0.85}
+              className="mb-3"
             >
-              <Text className="text-white text-[14px] font-figtree-bold">
-                Approve Alternative
-              </Text>
-            </TouchableOpacity>
+              Approve Alternative
+            </Button>
 
-            {/* Row: Choose Another + Skip Item */}
+            {/* Choose Another + Skip Item */}
             <View className="flex-row gap-3">
-              <TouchableOpacity
-                className="flex-1 border border-border rounded-xl py-3.5 items-center"
-                activeOpacity={0.75}
-              >
-                <Text className="text-[13px] font-figtree-bold text-text-dark">
+              <View className="flex-1">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  fullWidth
+                  onPress={handleChooseAnother}
+                >
                   Choose Another
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                className="flex-1 rounded-xl py-3.5 items-center"
-                style={{ backgroundColor: '#FEE2E2' }}
-                activeOpacity={0.75}
-              >
-                <Text className="text-[13px] font-figtree-bold text-status-error">
+                </Button>
+              </View>
+              <View className="flex-1">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  fullWidth
+                  onPress={handleSkip}
+                >
                   Skip Item
-                </Text>
-              </TouchableOpacity>
+                </Button>
+              </View>
             </View>
           </View>
         </View>

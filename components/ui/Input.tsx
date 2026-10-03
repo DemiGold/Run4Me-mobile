@@ -23,8 +23,9 @@ import { colors } from '@/constants/colors';
 //   - UPPERCASE micro (profile / payment): "CARD NUMBER"
 // Controlled via the `uppercaseLabel` prop.
 //
-// Supports optional leading icon, error message, helper text,
-// and an onBlur callback for per-field validation.
+// Supports optional leading AND trailing icons, error message,
+// helper text, and an onBlur callback for per-field validation.
+// Trailing icon is used for password visibility toggles.
 // ─────────────────────────────────────────────────────────────
 
 interface InputProps {
@@ -34,13 +35,14 @@ interface InputProps {
   onBlur?: () => void;
   placeholder?: string;
   leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
   error?: string;
   helperText?: string;
   editable?: boolean;
   secureTextEntry?: boolean;
   keyboardType?: KeyboardTypeOptions;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-  autoComplete?: 'email' | 'tel' | 'name' | 'off' | 'cc-number';
+  autoComplete?: 'email' | 'tel' | 'name' | 'off' | 'cc-number' | 'password';
   uppercaseLabel?: boolean;
   className?: string;
   inputClassName?: string;
@@ -53,6 +55,7 @@ export function Input({
   onBlur,
   placeholder,
   leftIcon,
+  rightIcon,
   error,
   helperText,
   editable = true,
@@ -92,6 +95,7 @@ export function Input({
         `}
       >
         {leftIcon ? <View className="mr-2.5">{leftIcon}</View> : null}
+
         <TextInput
           className={`
             flex-1 text-body font-figtree text-ink
@@ -112,6 +116,9 @@ export function Input({
           autoCapitalize={autoCapitalize}
           autoComplete={autoComplete}
         />
+
+        {/* Right icon — typically a password visibility toggle */}
+        {rightIcon ? <View className="ml-2.5">{rightIcon}</View> : null}
       </View>
 
       {/* Error / helper text */}

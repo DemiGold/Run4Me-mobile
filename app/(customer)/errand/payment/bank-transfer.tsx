@@ -76,7 +76,11 @@ export default function BankTransfer() {
     // ─── MOCK: route forward to status polling screen ───
     router.replace({
       pathname: '/(customer)/errand/payment/bank-payment-confirmation',
-      params: { amount: String(amount), errandId },
+      params: {
+        ...params,
+        amount: String(amount),
+        paymentMethod: 'bank',
+      },
     });
   };
 

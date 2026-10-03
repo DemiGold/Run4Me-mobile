@@ -11,18 +11,19 @@ import { colors } from '@/constants/colors';
 // Checkout / Cost Estimate
 //
 // Figma: Cost Estimate
-//   Cost breakdown card · payment method radio list ·
+//   Cost breakdown card + payment method radio list +
 //   sticky "Due Now" bar at the bottom.
 //
-// Payment branches:
-//   wallet   → payment/wallet          (PIN + escrow)
-//   card     → payment/card            (card entry → OTP)
-//   transfer → payment/bank-transfer   (account details → polling)
-//   cash     → payment/cash            (amount → runner accepts)
+// Runs AFTER the customer picks a runner, so the runner's fee
+// folds into the final total here (not at the earlier wizard
+// step). The runnerPrice param arrives from runner-secured as a
+// formatted string like "₦2,500".
 //
-// All wizard params (items, pickup, dropoff, budget, instructions,
-// timeline, scheduledDate/Time) forward to the payment screen so
-// nothing is lost between checkout and confirmation.
+// Payment branches:
+//   wallet   → payment/wallet
+//   card     → payment/card
+//   transfer → payment/bank-transfer
+//   cash     → payment/cash
 // ─────────────────────────────────────────────────────────────
 
 const SERVICE_FEE = 1500;
@@ -78,12 +79,26 @@ export default function Checkout() {
     timeline?: string;
     scheduledDate?: string;
     scheduledTime?: string;
+    // Runner details from runner-secured
+    runnerId?: string;
+    runnerName?: string;
+    runnerRating?: string;
+    runnerPrice?: string;      // formatted, e.g. "₦2,500"
+    runnerPickupMins?: string;
+    runnerCompleted?: string;
+    runnerVehicle?: string;
   }>();
 
   const budget = Number(params.budget ?? '15000') || 15000;
   const promoDiscount = params.promo === 'FIRST4ME' ? 1000 : 0;
-  const serviceTotal = SERVICE_FEE + DISTANCE_FEE + PLATFORM_FEE - promoDiscount;
-  const dueNow = serviceTotal + budget;
+
+  // Extract numeric runner fee from "₦2,500" → 2500
+  const runnerFee =
+    Number((params.runnerPrice ?? '').replace(/\D/g, '')) || 0;
+
+  const serviceTotal =
+    SERVICE_FEE + DISTANCE_FEE + PLATFORM_FEE - promoDiscount;
+  const dueNow = serviceTotal + runnerFee + budget;
 
   const [selected, setSelected] = useState<PaymentMethod>('wallet');
 
@@ -123,7 +138,6 @@ export default function Checkout() {
 
         <Text className="text-body font-gabarito text-ink">Cost Estimate</Text>
 
-        {/* Spacer — Figma's "T" bubble was a designer artifact, removed */}
         <View className="w-9" />
       </View>
 
@@ -148,9 +162,24 @@ export default function Checkout() {
 
             <Row label="Shopping Budget" value={formatNaira(budget)} />
 
+            {/* Runner fee — only when a runner has been selected */}
+            {runnerFee > 0 ? (
+              <>
+                <View className="h-[1px] bg-border my-3" />
+                <Row
+                  label={
+                    params.runnerName
+                      ? `Runner Fee (${params.runnerName})`
+                      : 'Runner Fee'
+                  }
+                  value={formatNaira(runnerFee)}
+                />
+              </>
+            ) : null}
+
             <View className="h-[1px] bg-border my-3" />
 
-            {/* Estimated total */}
+            {/* Estimated service total */}
             <View className="flex-row items-center justify-between">
               <View className="flex-1 pr-3">
                 <Text className="text-body-xs font-gabarito-bold text-ink">

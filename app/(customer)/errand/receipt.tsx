@@ -10,21 +10,36 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { Button } from '@/components/ui/Button';
+import { colors } from '@/constants/colors';
 
-const RECEIPT_IMAGE = require('@/assets/receipt-photo.png'); 
+// ─────────────────────────────────────────────────────────────
+// Receipt & Billing
+//
+// Post-errand screen. Shows the runner's uploaded receipt, the
+// itemised purchase list, budget comparison, and any refund that
+// goes back to the wallet.
+//
+// Figma: receipt
+//   Receipt photo · uploaded timestamp · itemised list ·
+//   budget/actual comparison · refund highlight box · CTA.
+//
+// MOCK: all values are placeholders. Real implementation pulls
+// from GET /errands/:id/receipt.
+// ─────────────────────────────────────────────────────────────
+
+const RECEIPT_IMAGE = require('@/assets/receipt-photo.png');
 
 const PURCHASED_ITEMS = [
-  { id: '1', name: 'Golden Penny Pasta x2', price: '₦1,200' },
-  { id: '2', name: 'Eva Table Water Case', price: '₦2,500' },
-  { id: '3', name: 'Lano Milk Powder 400g', price: '₦2,100' },
+  { id: '1', name: 'Golden Penny Pasta x2',    price: '₦1,200' },
+  { id: '2', name: 'Eva Table Water Case',     price: '₦2,500' },
+  { id: '3', name: 'Lano Milk Powder 400g',    price: '₦2,100' },
   { id: '4', name: 'Kellogg Cornflakes Large', price: '₦7,400' },
 ];
 
 const APPROVED_BUDGET = '₦15,000';
-const ACTUAL_SPENT = '₦13,200';
-const REFUND_AMOUNT = '₦1,800';
+const ACTUAL_SPENT    = '₦13,200';
+const REFUND_AMOUNT   = '₦1,800';
 
 export default function ReceiptBilling() {
   const params = useLocalSearchParams<{
@@ -32,14 +47,6 @@ export default function ReceiptBilling() {
     pickup?: string;
     dropoff?: string;
   }>();
-
-  const [fontsLoaded] = useFonts({
-    Gabarito_800ExtraBold,
-    Figtree_500Medium,
-    Figtree_700Bold,
-  });
-
-  if (!fontsLoaded) return null;
 
   const handleContinue = () => {
     router.replace({
@@ -49,18 +56,19 @@ export default function ReceiptBilling() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
       {/* Header */}
       <View className="flex-row items-center justify-between px-6 pt-4 pb-4">
         <TouchableOpacity
           onPress={() => router.back()}
           className="w-9 h-9 rounded-full border border-border items-center justify-center"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Feather name="arrow-left" size={18} color="#0F172A" />
+          <Feather name="arrow-left" size={18} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text className="text-[15px] font-gabarito text-text-dark">
-          Receipt & Billing
+        <Text className="text-body font-gabarito text-ink">
+          Receipt &amp; Billing
         </Text>
 
         <View className="w-9" />
@@ -86,15 +94,15 @@ export default function ReceiptBilling() {
 
           {/* Uploaded info */}
           <View className="flex-row items-center justify-center gap-1.5 mb-6">
-            <Feather name="file-text" size={12} color="#94A3B8" />
-            <Text className="text-[11px] font-figtree text-text-gray">
+            <Feather name="file-text" size={12} color={colors.subtle} />
+            <Text className="text-caption-sm font-figtree text-muted">
               David uploaded receipt at 10:14 AM
             </Text>
           </View>
 
-          {/* PURCHASED ITEMS card */}
-          <View className="border border-border rounded-2xl p-4 bg-white mb-5">
-            <Text className="text-[11px] font-figtree-bold text-text-dark tracking-wider mb-4">
+          {/* Purchased items card */}
+          <View className="border border-border rounded-2xl p-4 bg-surface mb-5">
+            <Text className="text-micro font-figtree-bold text-ink uppercase tracking-wider mb-4">
               PURCHASED ITEMS
             </Text>
 
@@ -105,10 +113,10 @@ export default function ReceiptBilling() {
                   key={item.id}
                   className="flex-row items-center justify-between"
                 >
-                  <Text className="flex-1 text-[13px] font-figtree text-text-gray pr-3">
+                  <Text className="flex-1 text-body-xs font-figtree text-muted pr-3">
                     {item.name}
                   </Text>
-                  <Text className="text-[13px] font-figtree-bold text-text-dark">
+                  <Text className="text-body-xs font-figtree-bold text-ink">
                     {item.price}
                   </Text>
                 </View>
@@ -117,39 +125,39 @@ export default function ReceiptBilling() {
 
             <View className="h-[1px] bg-border mb-3" />
 
-            {/* Budget rows */}
+            {/* Budget comparison */}
             <View className="gap-2 mb-4">
               <View className="flex-row items-center justify-between">
-                <Text className="text-[13px] font-figtree text-text-gray">
+                <Text className="text-body-xs font-figtree text-muted">
                   Approved Shopping Budget
                 </Text>
-                <Text className="text-[13px] font-figtree text-text-dark">
+                <Text className="text-body-xs font-figtree text-ink">
                   {APPROVED_BUDGET}
                 </Text>
               </View>
 
               <View className="flex-row items-center justify-between">
-                <Text className="text-[13px] font-figtree-bold text-text-dark">
+                <Text className="text-body-xs font-figtree-bold text-ink">
                   Actual Amount Spent
                 </Text>
-                <Text className="text-[13px] font-figtree-bold text-text-dark">
+                <Text className="text-body-xs font-figtree-bold text-ink">
                   {ACTUAL_SPENT}
                 </Text>
               </View>
             </View>
 
-            {/* Refund box */}
+            {/* Refund highlight box */}
             <View className="rounded-xl px-4 py-3 flex-row items-center justify-between bg-status-successLight">
               <View className="flex-row items-center gap-2">
                 <View className="w-5 h-5 rounded-full bg-status-success items-center justify-center">
-                  <Feather name="check" size={11} color="#FFFFFF" />
+                  <Feather name="check" size={11} color={colors.white} />
                 </View>
-                <Text className="text-[13px] font-figtree-bold text-status-successDark">
+                <Text className="text-body-xs font-figtree-bold text-status-successDark">
                   Refund to Wallet
                 </Text>
               </View>
 
-              <Text className="text-[14px] font-gabarito text-status-successDark">
+              <Text className="text-body-sm font-gabarito text-status-successDark">
                 {REFUND_AMOUNT}
               </Text>
             </View>
@@ -158,16 +166,10 @@ export default function ReceiptBilling() {
       </ScrollView>
 
       {/* Bottom CTA */}
-      <View className="px-6 pb-6 pt-3 bg-white">
-        <TouchableOpacity
-          onPress={handleContinue}
-          className="bg-primary rounded-2xl py-4 items-center"
-          activeOpacity={0.85}
-        >
-          <Text className="text-white text-[14px] font-gabarito tracking-wider">
-            Continue
-          </Text>
-        </TouchableOpacity>
+      <View className="px-6 pb-6 pt-3">
+        <Button variant="primary" fullWidth onPress={handleContinue}>
+          Continue
+        </Button>
       </View>
     </SafeAreaView>
   );

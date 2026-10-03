@@ -4,8 +4,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { Button } from '@/components/ui/Button';
+import { colors } from '@/constants/colors';
+
+// ─────────────────────────────────────────────────────────────
+// Errand Confirmed
+//
+// Post-payment confirmation. Shows the matched runner, pickup /
+// dropoff, and total charged. Tracking CTA routes to live-tracking.
+//
+// Figma: errand-confirmed
+//   Green success circle · title · subtitle · summary card ·
+//   Track Errand CTA.
+//
+// MOCK: values come from route params with sensible fallbacks.
+// ─────────────────────────────────────────────────────────────
 
 const SERVICE_FEE = 1500;
 const DISTANCE_FEE = 800;
@@ -17,6 +30,7 @@ export default function ErrandConfirmed() {
     promo?: string;
     pickup?: string;
     dropoff?: string;
+    items?: string;
     budget?: string;
     instructions?: string;
     timeline?: string;
@@ -27,14 +41,6 @@ export default function ErrandConfirmed() {
     runnerVehicle?: string;
     runnerPickupMins?: string;
   }>();
-
-  const [fontsLoaded] = useFonts({
-    Gabarito_800ExtraBold,
-    Figtree_500Medium,
-    Figtree_700Bold,
-  });
-
-  if (!fontsLoaded) return null;
 
   const runnerName = params.runnerName ?? 'David';
   const runnerRating = params.runnerRating ?? '4.9';
@@ -61,26 +67,26 @@ export default function ErrandConfirmed() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
       <View className="flex-1 px-6 pt-12">
-        {/* Green check circle */}
+        {/* Success circle */}
         <View className="items-center mb-6">
-          <View className="w-20 h-20 rounded-full bg-green-50 items-center justify-center">
-            <Feather name="check" size={36} color="#22C55E" />
+          <View className="w-20 h-20 rounded-full bg-status-successLight items-center justify-center">
+            <Feather name="check" size={36} color={colors.success} />
           </View>
         </View>
 
-        {/* Title */}
-        <Text className="text-[22px] font-gabarito text-text-dark text-center mb-2">
+        {/* Title + subtitle */}
+        <Text className="text-heading-sm font-gabarito text-ink text-center mb-2">
           Your Errand is Confirmed 🎉
         </Text>
-        <Text className="text-[13px] font-figtree text-text-gray text-center leading-5 mb-8">
+        <Text className="text-body-xs font-figtree text-muted text-center mb-8">
           Runner {runnerName} is on his way to handle your requests.
         </Text>
 
         {/* Summary card */}
-        <View className="border border-border rounded-2xl p-4 bg-white mb-6">
-          <Text className="text-[11px] font-figtree-bold text-text-dark tracking-wider mb-4">
+        <View className="border border-border rounded-2xl p-4 bg-surface mb-6">
+          <Text className="text-micro font-figtree-bold text-ink uppercase tracking-wider mb-4">
             ERRAND SUMMARY
           </Text>
 
@@ -88,18 +94,18 @@ export default function ErrandConfirmed() {
           <View className="flex-row items-center gap-3 mb-4">
             <View
               className="w-11 h-11 rounded-full items-center justify-center"
-              style={{ borderWidth: 2, borderColor: '#006B75' }}
+              style={{ borderWidth: 2, borderColor: colors.primary }}
             >
-              <View className="w-full h-full rounded-full bg-slate-200 items-center justify-center overflow-hidden">
-                <Feather name="user" size={20} color="#94A3B8" />
+              <View className="w-full h-full rounded-full bg-background-dark items-center justify-center overflow-hidden">
+                <Feather name="user" size={20} color={colors.subtle} />
               </View>
             </View>
 
             <View className="flex-1">
-              <Text className="text-[13px] font-gabarito text-text-dark">
+              <Text className="text-body-xs font-gabarito-bold text-ink">
                 {runnerName} (Verified Runner)
               </Text>
-              <Text className="text-[11px] font-figtree text-text-gray mt-0.5">
+              <Text className="text-caption-sm font-figtree text-muted mt-0.5">
                 ⭐ {runnerRating} · ETA {runnerPickupMins} mins
               </Text>
             </View>
@@ -109,12 +115,17 @@ export default function ErrandConfirmed() {
 
           {/* Shopping from */}
           <View className="flex-row items-start gap-3 mb-4">
-            <Feather name="shopping-bag" size={16} color="#FF9F1C" className="mt-0.5" />
+            <Feather
+              name="shopping-bag"
+              size={16}
+              color={colors.accent}
+              style={{ marginTop: 2 }}
+            />
             <View className="flex-1">
-              <Text className="text-[9px] font-figtree-bold text-text-light uppercase tracking-wider mb-0.5">
+              <Text className="text-micro font-figtree-bold text-text-light uppercase tracking-wider mb-0.5">
                 Shopping From
               </Text>
-              <Text className="text-[13px] font-figtree-bold text-text-dark">
+              <Text className="text-body-xs font-figtree-bold text-ink">
                 {pickup}
               </Text>
             </View>
@@ -122,12 +133,17 @@ export default function ErrandConfirmed() {
 
           {/* Delivering to */}
           <View className="flex-row items-start gap-3 mb-4">
-            <Feather name="map-pin" size={16} color="#006B75" className="mt-0.5" />
+            <Feather
+              name="map-pin"
+              size={16}
+              color={colors.primary}
+              style={{ marginTop: 2 }}
+            />
             <View className="flex-1">
-              <Text className="text-[9px] font-figtree-bold text-text-light uppercase tracking-wider mb-0.5">
+              <Text className="text-micro font-figtree-bold text-text-light uppercase tracking-wider mb-0.5">
                 Delivering To
               </Text>
-              <Text className="text-[13px] font-figtree-bold text-text-dark">
+              <Text className="text-body-xs font-figtree-bold text-ink">
                 {dropoff}
               </Text>
             </View>
@@ -137,10 +153,10 @@ export default function ErrandConfirmed() {
 
           {/* Total */}
           <View className="flex-row items-center justify-between">
-            <Text className="text-[12px] font-figtree text-text-gray">
+            <Text className="text-caption font-figtree text-muted">
               Total Amount Charged
             </Text>
-            <Text className="text-[16px] font-gabarito text-primary">
+            <Text className="text-body font-gabarito-bold text-primary">
               {totalCharged}
             </Text>
           </View>
@@ -148,16 +164,10 @@ export default function ErrandConfirmed() {
       </View>
 
       {/* Bottom CTA */}
-      <View className="px-6 pb-6 pt-3 bg-white">
-        <TouchableOpacity
-          onPress={handleTrack}
-          className="bg-primary rounded-2xl py-4 items-center"
-          activeOpacity={0.85}
-        >
-          <Text className="text-white text-[14px] font-gabarito tracking-wider">
-            Track Errand
-          </Text>
-        </TouchableOpacity>
+      <View className="px-6 pb-6 pt-3">
+        <Button variant="primary" fullWidth onPress={handleTrack}>
+          Track Errand
+        </Button>
       </View>
     </SafeAreaView>
   );

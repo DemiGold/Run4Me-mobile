@@ -87,7 +87,7 @@ export default function CardOtp() {
 
         // ─── Success → bank-payment-confirmation (or next step) ───
         router.replace({
-          pathname: '/(customer)/errand/payment/bank-payment-confirmation',
+          pathname: '/(customer)/errand/errand-confirmed',
           params: { amount, errandId },
         });
       } catch {

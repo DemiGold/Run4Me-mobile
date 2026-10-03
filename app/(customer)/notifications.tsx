@@ -4,19 +4,31 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-import { useFonts, Gabarito_800ExtraBold } from '@expo-google-fonts/gabarito';
-import { Figtree_500Medium, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { colors } from '@/constants/colors';
 
-type Notification = {
+// ─────────────────────────────────────────────────────────────
+// Notifications
+//
+// Figma: notification list
+//   Tone system (teal/orange/green) · rounded-square icon tiles ·
+//   subtle card shadow · timestamp = 11px muted.
+//
+// MOCK: NOTIFICATIONS array below. Replace with paginated
+// GET /notifications when backend ships.
+// ─────────────────────────────────────────────────────────────
+
+type Tone = 'teal' | 'orange' | 'green';
+
+interface Notification {
   id: string;
   title: string;
   desc: string;
   time: string;
-  icon: string;
-  color: 'teal' | 'orange' | 'green';
+  icon: React.ComponentProps<typeof Feather>['name'];
+  tone: Tone;
   needsAction?: boolean;
   actionAmount?: string;
-};
+}
 
 const NOTIFICATIONS: Notification[] = [
   {
@@ -25,7 +37,7 @@ const NOTIFICATIONS: Notification[] = [
     desc: "Your Runner says 'Ariel Detergent 1kg' is out of stock. Would you prefer 'So Klin 1kg' instead?",
     time: 'Just now',
     icon: 'refresh-cw',
-    color: 'teal',
+    tone: 'teal',
     needsAction: true,
     actionAmount: '₦1,800',
   },
@@ -35,7 +47,7 @@ const NOTIFICATIONS: Notification[] = [
     desc: 'Runner Tunde has accepted your Grocery Pickup request. He is on his way to Spar Lekki.',
     time: '5 mins ago',
     icon: 'user-check',
-    color: 'teal',
+    tone: 'teal',
   },
   {
     id: '3',
@@ -43,7 +55,7 @@ const NOTIFICATIONS: Notification[] = [
     desc: 'Tunde has checked in at Spar Lekki and is now shopping.',
     time: '12 mins ago',
     icon: 'map-pin',
-    color: 'orange',
+    tone: 'orange',
   },
   {
     id: '4',
@@ -51,7 +63,7 @@ const NOTIFICATIONS: Notification[] = [
     desc: 'Runner uploaded invoice of ₦14,200. Check to confirm final pricing.',
     time: '25 mins ago',
     icon: 'file-text',
-    color: 'teal',
+    tone: 'teal',
   },
   {
     id: '5',
@@ -59,7 +71,7 @@ const NOTIFICATIONS: Notification[] = [
     desc: 'Errand dispatched. Watch real-time delivery map of Lekki Phase 1.',
     time: '40 mins ago',
     icon: 'navigation',
-    color: 'orange',
+    tone: 'orange',
   },
   {
     id: '6',
@@ -67,7 +79,7 @@ const NOTIFICATIONS: Notification[] = [
     desc: 'Tunde delivered your items safely. Please verify and rate your experience.',
     time: '1 hour ago',
     icon: 'check-circle',
-    color: 'teal',
+    tone: 'green',
   },
   {
     id: '7',
@@ -75,98 +87,127 @@ const NOTIFICATIONS: Notification[] = [
     desc: 'A user requested a pharmacy run within 1.5 km (₦2,500 payout).',
     time: '2 hours ago',
     icon: 'bell',
-    color: 'orange',
+    tone: 'orange',
   },
 ];
 
+// ─── Tone → color mapping ───
+const TONE_STYLES: Record<Tone, { bg: string; fg: string }> = {
+  teal:   { bg: colors.primaryLight, fg: colors.primary },
+  orange: { bg: colors.accentLight,  fg: colors.accent },
+  green:  { bg: colors.successLight, fg: colors.successDark },
+};
+
+// Figma: x=0 y=4 blur=12 spread=0 #000000 @ 3.14%
+const cardShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.0314,
+  shadowRadius: 12,
+  elevation: 2,
+};
+
 export default function Notifications() {
-  const [fontsLoaded] = useFonts({ Gabarito_800ExtraBold, Figtree_500Medium, Figtree_700Bold });
-  if (!fontsLoaded) return null;
-
-  const bgFor = (color: string) =>
-    color === 'orange' ? '#FFF5E6' : color === 'green' ? '#DCFCE7' : '#E6F3F5';
-
-  const fgFor = (color: string) =>
-    color === 'orange' ? '#FF9F1C' : color === 'green' ? '#16A34A' : '#006B75';
-
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-6 pt-5 pb-5">
-        <Text className="text-[24px] font-gabarito text-text-dark">
-          Notifications
-        </Text>
+    <SafeAreaView className="flex-1 bg-surface" edges={['top', 'left', 'right']}>
+
+      {/* ─── Header ─── */}
+      <View className="flex-row items-center justify-between px-6 pt-4 pb-5">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="w-9 h-9 items-center justify-center"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Feather name="arrow-left" size={24} color={colors.ink} />
+        </TouchableOpacity>
+
+        <Text className="text-body font-gabarito text-ink">Notifications</Text>
 
         <TouchableOpacity
           className="w-9 h-9 rounded-full border border-border items-center justify-center"
           activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Feather name="check-square" size={16} color="#0F172A" />
+          <Feather name="check-circle" size={16} color={colors.ink} />
         </TouchableOpacity>
       </View>
 
+      {/* ─── Feed ─── */}
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
       >
         <View className="px-6 gap-3">
-          {NOTIFICATIONS.map((n) => (
-            <View
-              key={n.id}
-              className={`rounded-2xl p-4 bg-white ${
-                n.needsAction ? 'border-2 border-primary' : 'border border-border'
-              }`}
-            >
-              {/* Top row: icon + title/time */}
-              <View className="flex-row items-start gap-3">
-                <View
-                  className="w-9 h-9 rounded-full items-center justify-center"
-                  style={{ backgroundColor: bgFor(n.color) }}
-                >
-                  <Feather name={n.icon as any} size={15} color={fgFor(n.color)} />
-                </View>
+          {NOTIFICATIONS.map((n) => {
+            const tone = TONE_STYLES[n.tone];
 
-                <View className="flex-1">
-                  <View className="flex-row items-start justify-between mb-1">
-                    <Text className="flex-1 text-[13px] font-gabarito text-text-dark pr-3">
-                      {n.title}
-                    </Text>
-                    <Text className="text-[10px] font-figtree text-text-light">
-                      {n.time}
-                    </Text>
+            return (
+              <View
+                key={n.id}
+                className={`
+                  rounded-2xl p-4 bg-surface
+                  ${n.needsAction
+                    ? 'border-2 border-primary'
+                    : 'border border-border'
+                  }
+                `}
+                style={n.needsAction ? undefined : cardShadow}
+              >
+                {/* Row: icon + body */}
+                <View className="flex-row items-start gap-3">
+                  {/* Icon — rounded square (Figma), not circle */}
+                  <View
+                    className="w-9 h-9 rounded-xl items-center justify-center"
+                    style={{ backgroundColor: tone.bg }}
+                  >
+                    <Feather name={n.icon} size={15} color={tone.fg} />
                   </View>
 
-                  <Text className="text-[12px] font-figtree text-text-gray leading-[18px]">
-                    {n.desc}
-                  </Text>
+                  {/* Body: gap 4px between title row and desc */}
+                  <View className="flex-1" style={{ gap: 4 }}>
+                    <View className="flex-row items-start justify-between">
+                      <Text
+                        className="flex-1 text-body-xs font-gabarito-bold text-ink pr-3"
+                      >
+                        {n.title}
+                      </Text>
+                      <Text className="text-caption-sm font-figtree text-muted">
+                        {n.time}
+                      </Text>
+                    </View>
+
+                    <Text className="text-caption font-figtree text-muted">
+                      {n.desc}
+                    </Text>
+                  </View>
                 </View>
+
+                {/* Actions */}
+                {n.needsAction && (
+                  <View className="flex-row gap-2 mt-4">
+                    <TouchableOpacity
+                      className="flex-1 border border-border rounded-xl py-3 items-center"
+                      activeOpacity={0.75}
+                    >
+                      <Text className="text-caption font-figtree-bold text-ink">
+                        Cancel Order
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      className="flex-1 bg-primary rounded-xl py-3 items-center"
+                      activeOpacity={0.85}
+                    >
+                      <Text className="text-caption font-figtree-bold text-white">
+                        Approve ({n.actionAmount})
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
-
-              {/* Action buttons (Substitution only) */}
-              {n.needsAction && (
-                <View className="flex-row gap-2 mt-4">
-                  <TouchableOpacity
-                    className="flex-1 border border-border rounded-xl py-3 items-center"
-                    activeOpacity={0.75}
-                  >
-                    <Text className="text-[12px] font-figtree-bold text-text-dark">
-                      Cancel Order
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    className="flex-1 bg-primary rounded-xl py-3 items-center"
-                    activeOpacity={0.85}
-                  >
-                    <Text className="text-[12px] font-figtree-bold text-white">
-                      Approve ({n.actionAmount})
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          ))}
+            );
+          })}
         </View>
       </ScrollView>
     </SafeAreaView>
