@@ -24,7 +24,7 @@ import { colors } from '@/constants/colors';
 // Runs after checkout when the customer chose the wallet method.
 //
 // Data flow:
-//   1. Read `amount` (naira string) and `errandId` from params.
+//   1. Read `amount` (kobo string) and `errandId` from params.
 //   2. Fetch real wallet balance via api.wallet.getBalance().
 //      The API returns kobo, so we hold balance in kobo.
 //   3. Customer enters a 4-digit PIN.
@@ -35,17 +35,12 @@ import { colors } from '@/constants/colors';
 //        - throws ApiError('PIN_INVALID')   → show "Incorrect PIN"
 //        - throws ApiError('INSUFFICIENT_FUNDS') → show balance warning
 //
-// Units — this is important:
-//   - `params.amount` is in NAIRA (that's what checkout sends).
-//   - Everything in services/types + services/mocks is in KOBO.
-//   - We convert ONCE at the top: `amountKobo = amountNaira * 100`.
-//   - All subsequent math and API calls use kobo.
+// Units — everything downstream of checkout is KOBO:
+//   - `params.amount` arrives from payment/checkout.tsx ALREADY
+//     in kobo. Checkout is the naira→kobo boundary; we do not
+//     convert here.
+//   - Everything in services/types + services/mocks is kobo.
 //   - `formatNaira(kobo)` divides by 100 for display.
-//
-// This screen is where the conversion happens. It's a known
-// inconsistency in the wizard; ideally checkout would send kobo,
-// but for now the wallet screen absorbs the fix so it's correct
-// regardless of what upstream sends.
 // ─────────────────────────────────────────────────────────────
 
 /** Convert a kobo amount (integer) to a display string: 2000000 → "₦20,000". */
@@ -55,7 +50,7 @@ const formatNaira = (kobo: number): string =>
 export default function WalletPayment() {
   // ─── Route params — full wizard chain ───
   const params = useLocalSearchParams<{
-    amount?: string;          // naira string from checkout
+    amount?: string;          // KOBO string — set by payment/checkout.tsx
     errandId?: string;
     // Wizard pass-through
     type?: string;
@@ -78,11 +73,10 @@ export default function WalletPayment() {
     paymentMethod?: string;
   }>();
 
-  // ─── Units conversion — do this ONCE ───
-  // params.amount is naira ("20000"). Everything downstream uses
-  // kobo. Convert here so the rest of the file is unit-consistent.
-  const amountNaira = params.amount ? parseInt(params.amount, 10) : 20_000;
-  const amountKobo = amountNaira * 100;
+  // ─── Units ───
+  // `params.amount` is already kobo (checkout converts at the
+  // boundary). Do not multiply again — that would double the value.
+  const amountKobo = params.amount ? parseInt(params.amount, 10) : 2_000_000;
 
   const errandId = params.errandId ?? '';
 
@@ -165,7 +159,7 @@ export default function WalletPayment() {
         pathname: '/(customer)/errand/errand-confirmed',
         params: {
           ...params,
-          amount: String(amountNaira), // keep the wizard's naira convention
+          amount: String(amountKobo), // kobo — convention holds downstream
           paymentMethod: 'wallet',
           paymentId: result.payment.id,
         },
